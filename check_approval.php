@@ -49,10 +49,11 @@ try {
         $email = trim($_POST['email'] ?? $_GET['email'] ?? '');
         $parents = trim($_POST['parents'] ?? $_GET['parents'] ?? '');
 
-        // Check if student already exists
-        $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) OR (device_id = ? AND device_id != "") ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
+        // Check if student already exists using LIKE matching
+        $like_name = '%' . $student_name . '%';
+        $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE student_name LIKE ? OR (device_id = ? AND device_id != "") ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
         if ($check_stmt) {
-            $check_stmt->bind_param('ss', $student_name, $device_id);
+            $check_stmt->bind_param('ss', $like_name, $device_id);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
 
@@ -60,7 +61,7 @@ try {
                 $row = $check_result->fetch_assoc();
 
                 if (!empty($device_id)) {
-                    $update_dev = $conn->prepare('UPDATE students SET device_id = ? WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?))');
+                    $update_dev = $conn->prepare('UPDATE students SET device_id = ? WHERE student_name = ?');
                     if ($update_dev) {
                         $update_dev->bind_param('ss', $device_id, $row['student_name']);
                         $update_dev->execute();
@@ -115,23 +116,9 @@ try {
 
         $found_row = null;
 
-        // Stage 1: Exact / Space-normalized match
+        // Flexible LIKE search (matches 'kirk', 'kirk ', 'kirk smith', etc.)
         if (!empty($student_name)) {
-            $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
-            if ($stmt) {
-                $stmt->bind_param('s', $student_name);
-                $stmt->execute();
-                $res = $stmt->get_result();
-                if ($res && $res->num_rows > 0) {
-                    $found_row = $res->fetch_assoc();
-                }
-                $stmt->close();
-            }
-        }
-
-        // Stage 2: Flexible LIKE match (matches partial names)
-        if (!$found_row && !empty($student_name)) {
-            $like_pattern = '%' . str_replace(' ', '%', $student_name) . '%';
+            $like_pattern = '%' . $student_name . '%';
             $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE student_name LIKE ? ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
             if ($stmt) {
                 $stmt->bind_param('s', $like_pattern);
@@ -144,7 +131,7 @@ try {
             }
         }
 
-        // Stage 3: Match by Device ID
+        // Fallback search by device_id
         if (!$found_row && !empty($device_id)) {
             $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE device_id = ? AND device_id != "" ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
             if ($stmt) {
@@ -162,7 +149,7 @@ try {
             $ret_status = strtoupper(trim($found_row['status']));
 
             if (!empty($device_id) && $found_row['device_id'] !== $device_id) {
-                $upd = $conn->prepare('UPDATE students SET device_id = ? WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?))');
+                $upd = $conn->prepare('UPDATE students SET device_id = ? WHERE student_name = ?');
                 if ($upd) {
                     $upd->bind_param('ss', $device_id, $found_row['student_name']);
                     $upd->execute();
@@ -181,15 +168,15 @@ try {
             exit();
         }
 
-        // Diagnostic list of names in database
+        // Diagnostic list of registered names in DB
         $all_names = [];
         $list_res = $conn->query("SELECT student_name, status FROM students LIMIT 5");
         if ($list_res) {
             while ($r = $list_res->fetch_assoc()) {
-                $all_names[] = $r['student_name'] . ' (' . strtoupper($r['status']) . ')';
+                $all_names[] = $r['student_name'] . ' (' . strtoupper(trim($r['status'])) . ')';
             }
         }
-        $db_names_text = !empty($all_names) ? ' Available in DB: ' . implode(', ', $all_names) : ' (Database table is currently empty!)';
+        $db_names_text = !empty($all_names) ? ' Available in DB: ' . implode(', ', $all_names) : ' (Database table is empty!)';
 
         echo json_encode([
             'status' => 'NOT_REGISTERED',
@@ -211,9 +198,10 @@ try {
             exit();
         }
 
-        $upd_stmt = $conn->prepare('UPDATE students SET status = ? WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) OR (device_id = ? AND device_id != "")');
+        $like_name = '%' . $student_name . '%';
+        $upd_stmt = $conn->prepare('UPDATE students SET status = ? WHERE student_name LIKE ? OR (device_id = ? AND device_id != "")');
         if ($upd_stmt) {
-            $upd_stmt->bind_param('sss', $new_status, $student_name, $device_id);
+            $upd_stmt->bind_param('sss', $new_status, $like_name, $device_id);
             if ($upd_stmt->execute()) {
                 echo json_encode([
                     'status' => 'SUCCESS',
