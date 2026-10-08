@@ -56,7 +56,7 @@ try {
 
             if ($check_result && $check_result->num_rows > 0) {
                 $row = $check_result->fetch_assoc();
-                
+
                 if (!empty($device_id)) {
                     $update_dev = $conn->prepare('UPDATE students SET device_id = ? WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?))');
                     if ($update_dev) {
