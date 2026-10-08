@@ -1,5 +1,5 @@
 -- Migration: add strand column to attendance_logs
--- Run this SQL against your `attendance_db` database.
+-- Run this SQL against the app database configured in db_config.php.
 
 ALTER TABLE attendance_logs
   ADD COLUMN strand VARCHAR(16) DEFAULT NULL;

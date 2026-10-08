@@ -5,7 +5,7 @@ ini_set('log_errors', 1);
 
 define('DB_HOST', getenv('DB_HOST') ?: 'mysql-2d11b6ef-itracker-project.f.aivencloud.com');
 define('DB_USER', getenv('DB_USER') ?: 'avnadmin');
-define('DB_PASSWORD', getenv('DB_PASS') ?: (getenv('AVNS_umvLm9FDKGbII7JhJGs') ?: ''));
+define('DB_PASSWORD', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: ''));
 define('DB_NAME', getenv('DB_NAME') ?: 'defaultdb');
 define('DB_PORT', (int)(getenv('DB_PORT') ?: 28102));
 

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once 'auth.php';
 $user = require_login(['coordinator']);
 $current_view = $_GET['view'] ?? 'agency';
