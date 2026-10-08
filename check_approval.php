@@ -5,13 +5,18 @@ require_once __DIR__ . '/db_config.php';
 
 try {
     $conn = project_db_connection();
+    if (!$conn) {
+        echo json_encode(['status' => 'ERROR', 'message' => 'Database connection failed']);
+        exit();
+    }
 
     $action = $_POST['action'] ?? $_GET['action'] ?? '';
-    $student_name = trim($_POST['student_name'] ?? $_GET['student_name'] ?? '');
+    $raw_name = trim($_POST['student_name'] ?? $_GET['student_name'] ?? '');
+    $student_name = preg_replace('/\s+/', ' ', $raw_name);
     $strand = trim($_POST['strand'] ?? $_GET['strand'] ?? '');
     $device_id = trim($_POST['device_id'] ?? $_GET['device_id'] ?? '');
 
-    // Auto-create students table if it doesn't exist yet in Aiven defaultdb
+    // Auto-create students table if missing
     $conn->query("CREATE TABLE IF NOT EXISTS students (
         id INT AUTO_INCREMENT PRIMARY KEY,
         student_name VARCHAR(255) NOT NULL,
@@ -32,10 +37,7 @@ try {
     // -------------------------------------------------------------
     if ($action === 'register') {
         if (empty($student_name)) {
-            echo json_encode([
-                'status' => 'ERROR',
-                'message' => 'Student name is required'
-            ]);
+            echo json_encode(['status' => 'ERROR', 'message' => 'Student name is required']);
             $conn->close();
             exit();
         }
@@ -47,8 +49,8 @@ try {
         $email = trim($_POST['email'] ?? $_GET['email'] ?? '');
         $parents = trim($_POST['parents'] ?? $_GET['parents'] ?? '');
 
-        // Check if student already exists by name OR device_id
-        $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?)) OR (device_id = ? AND device_id != "") LIMIT 1');
+        // Prioritize APPROVED record if multiple rows exist
+        $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) OR (device_id = ? AND device_id != "") ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
         if ($check_stmt) {
             $check_stmt->bind_param('ss', $student_name, $device_id);
             $check_stmt->execute();
@@ -67,10 +69,10 @@ try {
                 }
 
                 echo json_encode([
-                    'status' => $row['status'],
+                    'status' => strtoupper($row['status']),
                     'strand' => $row['strand'],
                     'student_name' => $row['student_name'],
-                    'message' => 'Account already exists with status: ' . $row['status']
+                    'message' => 'Account already exists with status: ' . strtoupper($row['status'])
                 ]);
                 $check_stmt->close();
                 $conn->close();
@@ -98,11 +100,6 @@ try {
                 ]);
             }
             $insert_stmt->close();
-        } else {
-            echo json_encode([
-                'status' => 'ERROR',
-                'message' => 'Query preparation failed: ' . $conn->error
-            ]);
         }
 
         $conn->close();
@@ -122,7 +119,8 @@ try {
             exit();
         }
 
-        $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?)) OR (device_id = ? AND device_id != "") LIMIT 1');
+        // Prioritize APPROVED record
+        $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) OR (device_id = ? AND device_id != "") ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
         if ($stmt) {
             $stmt->bind_param('ss', $student_name, $device_id);
             $stmt->execute();
@@ -161,7 +159,45 @@ try {
         exit();
     }
 
-    // Default response
+    // -------------------------------------------------------------
+    // 3. ACTION: APPROVE / UPDATE_STATUS (NEW: Coordinator Approval)
+    // -------------------------------------------------------------
+    if ($action === 'approve' || $action === 'update_status') {
+        $new_status = strtoupper(trim($_POST['status'] ?? $_GET['status'] ?? 'APPROVED'));
+
+        if (empty($student_name)) {
+            echo json_encode([
+                'status' => 'ERROR',
+                'message' => 'Student name is required to update status'
+            ]);
+            $conn->close();
+            exit();
+        }
+
+        $upd_stmt = $conn->prepare('UPDATE students SET status = ? WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) OR (device_id = ? AND device_id != "")');
+        if ($upd_stmt) {
+            $upd_stmt->bind_param('sss', $new_status, $student_name, $device_id);
+            if ($upd_stmt->execute()) {
+                echo json_encode([
+                    'status' => 'SUCCESS',
+                    'message' => 'Student status updated to ' . $new_status
+                ]);
+                $upd_stmt->close();
+                $conn->close();
+                exit();
+            }
+            $upd_stmt->close();
+        }
+
+        echo json_encode([
+            'status' => 'ERROR',
+            'message' => 'Failed to update student status in database'
+        ]);
+        $conn->close();
+        exit();
+    }
+
+    // Default response for unrecognized actions
     echo json_encode([
         'status' => 'ERROR',
         'message' => 'Invalid action: ' . $action
@@ -170,11 +206,10 @@ try {
     $conn->close();
 
 } catch (Throwable $e) {
-    error_log('Approval endpoint failed: ' . $e->getMessage());
-    http_response_code(500);
+    http_response_code(200); // Send 200 JSON payload instead of 500 error page
     echo json_encode([
         'status' => 'ERROR',
-        'message' => 'The request could not be completed. Check the server error log.'
+        'message' => 'Script Exception: ' . $e->getMessage()
     ]);
 }
 ?>
