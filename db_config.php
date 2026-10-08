@@ -3,8 +3,6 @@
 error_reporting(0);
 ini_set('display_errors', 0);
 
-header('Content-Type: application/json; charset=utf-8');
-
 define('DB_HOST', getenv('DB_HOST') ?: 'mysql-2d11b6ef-itracker-project.f.aivencloud.com');
 define('DB_USER', getenv('DB_USER') ?: 'avnadmin');
 define('DB_PASSWORD', getenv('DB_PASS') ?: 'AVNS_umvLm9FDKGbII7JhJGs'); // Check your Aiven password
