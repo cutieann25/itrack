@@ -2,8 +2,8 @@
 // submit_evaluation.php
 header('Content-Type: application/json');
 
-// Enable error reporting for debugging
-ini_set('display_errors', 1);
+// Log PHP errors without exposing server details in API responses.
+ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
 require_once 'db_config.php';
