@@ -50,7 +50,7 @@ try {
         $parents = trim($_POST['parents'] ?? $_GET['parents'] ?? '');
 
         // Check if student already exists by name OR device_id
-        $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?)) OR (device_id = ? AND device_id != "") LIMIT 1');
+        $check_stmt = $conn->prepare("SELECT status, student_name, strand FROM students WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?)) OR (device_id = ? AND device_id != '') LIMIT 1");
         if (!$check_stmt) {
             throw new RuntimeException('Unable to look up existing student: ' . $conn->error);
         }
@@ -127,7 +127,7 @@ try {
             exit();
         }
 
-        $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?)) OR (device_id = ? AND device_id != "") LIMIT 1');
+        $stmt = $conn->prepare("SELECT student_name, status, strand, device_id FROM students WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?)) OR (device_id = ? AND device_id != '') LIMIT 1");
         if (!$stmt) {
             throw new RuntimeException('Unable to look up student approval: ' . $conn->error);
         }
