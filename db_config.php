@@ -2,10 +2,11 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Manila');
 
 define('DB_HOST', getenv('DB_HOST') ?: 'mysql-2d11b6ef-itracker-project.f.aivencloud.com');
 define('DB_USER', getenv('DB_USER') ?: 'avnadmin');
-define('DB_PASSWORD', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: ''));
+define('DB_PASSWORD', getenv('DB_PASS') ?: (getenv('AVNS_umvLm9FDKGbII7JhJGs') ?: ''));
 define('DB_NAME', getenv('DB_NAME') ?: 'defaultdb');
 define('DB_PORT', (int)(getenv('DB_PORT') ?: 28102));
 
@@ -29,6 +30,9 @@ function project_db_connection() {
         $conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, 10);
         if (!$conn->real_connect(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT, null, MYSQLI_CLIENT_SSL)) {
             throw new RuntimeException($conn->connect_error ?: mysqli_connect_error());
+        }
+        if (!$conn->query("SET time_zone = '+08:00'")) {
+            throw new RuntimeException($conn->error);
         }
         if (!$conn->set_charset('utf8mb4')) {
             throw new RuntimeException($conn->error);
