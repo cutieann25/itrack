@@ -1,0 +1,132 @@
+.coordinator-shell {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    min-height: 100vh;
+    gap: 0;
+    overflow: visible;
+}
+
+.coordinator-shell.sidebar-collapsed {
+    grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.coordinator-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    align-self: start;
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 24px 16px;
+    background: #dc2626;
+    color: #f8fafc;
+    border-right: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: 14px 0 36px rgba(15, 23, 42, 0.08);
+    z-index: 10;
+}
+
+.coordinator-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px 24px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.coordinator-sidebar-logo {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #dc2626;
+    font-weight: 700;
+}
+
+.coordinator-sidebar-brand h2 {
+    display: block;
+    margin: 0;
+    color: #ffffff !important;
+    font-size: 1.08rem;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+.coordinator-sidebar-brand p { margin: 4px 0 0; color: #94a3b8; font-size: .78rem; }
+.coordinator-access-label { margin: 0 12px 18px; color: #cbd5e1; font-size: .82rem; }
+
+.coordinator-sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 18px;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 12px;
+    background: #1e293b;
+    color: #cbd5e1;
+    cursor: pointer;
+    font: inherit;
+}
+
+.coordinator-sidebar-toggle:hover { background: #334155; color: #fff; }
+.coordinator-sidebar-section-title { margin: 24px 12px 10px; color: #64748b; font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; }
+.coordinator-sidebar-nav { display: grid; gap: 6px; }
+
+.coordinator-sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: #cbd5e1;
+    text-decoration: none;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.coordinator-sidebar-link:hover { background: #b91c1c; border-color: #dc2626; color: #fff; }
+.coordinator-sidebar-link.active { background: #ffffff; border-color: #ffffff; color: #991b1b; box-shadow: 0 8px 18px rgba(127, 29, 29, .18); }
+.coordinator-sidebar-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: rgba(255,255,255,.12); color: #ffffff; flex: 0 0 auto; }
+.coordinator-sidebar-link:hover .coordinator-sidebar-icon { background: rgba(255,255,255,.2); color: #ffffff; }
+.coordinator-sidebar-link.active .coordinator-sidebar-icon { background: #fef2f2; color: #dc2626; }
+.coordinator-sidebar-link-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.coordinator-sidebar-link-text strong { font-size: .9rem; font-weight: 600; }
+.coordinator-sidebar-link-text small { color: #94a3b8; font-size: .74rem; line-height: 1.3; }
+.coordinator-sidebar-link.active .coordinator-sidebar-link-text small { color: #786d6d; }
+.coordinator-sidebar-menu { display: grid; gap: 6px; }
+.coordinator-sidebar-submenu { display: none; gap: 4px; padding: 6px 8px; margin-top: -2px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(15,23,42,.72); }
+.coordinator-sidebar-menu.expanded .coordinator-sidebar-submenu { display: grid; }
+.coordinator-sidebar-subitem { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid transparent; border-radius: 9px; color: #cbd5e1; text-decoration: none; font-size: .8rem; }
+.coordinator-sidebar-subitem .material-symbols-outlined { font-size: 1.05rem; color: #ffffff; }
+.coordinator-sidebar-subitem:hover, .coordinator-sidebar-subitem.active { background: #b91c1c; border-color: #dc2626; color: #fff; }
+.coordinator-sidebar-subitem:hover .material-symbols-outlined, .coordinator-sidebar-subitem.active .material-symbols-outlined { color: #ffffff; }
+.coordinator-sidebar-logout { margin-top: 12px; border-top: 1px solid rgba(255,255,255,.18); border-radius: 0 0 12px 12px; padding-top: 16px; }
+.coordinator-sidebar-logout:hover { background: #b91c1c; border-color: #dc2626; }
+
+.coordinator-content { min-width: 0; }
+
+.coordinator-shell.sidebar-collapsed .coordinator-sidebar-brand h2,
+.coordinator-shell.sidebar-collapsed .coordinator-sidebar-brand p,
+.coordinator-shell.sidebar-collapsed .coordinator-access-label,
+.coordinator-shell.sidebar-collapsed .coordinator-sidebar-section-title,
+.coordinator-shell.sidebar-collapsed .coordinator-sidebar-link-text,
+.coordinator-shell.sidebar-collapsed .sidebar-toggle-label,
+.coordinator-shell.sidebar-collapsed .coordinator-sidebar-submenu { display: none; }
+.coordinator-shell.sidebar-collapsed .coordinator-sidebar-link { justify-content: center; }
+.coordinator-shell.sidebar-collapsed .coordinator-sidebar-toggle { width: 48px; height: 48px; padding: 0; margin-left: auto; margin-right: auto; }
+
+@media (max-width: 1100px) {
+    .coordinator-shell { grid-template-columns: 1fr; }
+    .coordinator-shell.sidebar-collapsed { grid-template-columns: 1fr; }
+    .coordinator-sidebar { position: relative; height: auto; }
+}
