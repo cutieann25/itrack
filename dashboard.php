@@ -3,6 +3,83 @@ date_default_timezone_set('Asia/Manila');
 require_once 'auth.php';
 require_login(['coordinator']);
 $conn = db_connection();
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_student') {
+    $csrf_token = $_POST['csrf_token'] ?? '';
+    $student_id = filter_var($_POST['student_id'] ?? null, FILTER_VALIDATE_INT);
+    if (!is_string($csrf_token) || !hash_equals($_SESSION['csrf_token'], $csrf_token) || $student_id === false || $student_id === null || $student_id <= 0) {
+        http_response_code(400);
+        exit('Invalid student deletion request.');
+    }
+
+    $lookup = $conn->prepare('SELECT student_name FROM students WHERE id = ? LIMIT 1');
+    if (!$lookup) {
+        error_log('Student deletion lookup failed: ' . $conn->error);
+        http_response_code(500);
+        exit('Unable to delete the student. Please contact the administrator.');
+    }
+    $lookup->bind_param('i', $student_id);
+    if (!$lookup->execute()) {
+        error_log('Student deletion lookup failed: ' . $lookup->error);
+        http_response_code(500);
+        exit('Unable to delete the student. Please contact the administrator.');
+    }
+    $student = $lookup->get_result()->fetch_assoc();
+    $lookup->close();
+    if (!$student) {
+        header('Location: dashboard.php?student_delete_error=not_found');
+        exit;
+    }
+
+    $student_id_string = (string)$student_id;
+    $student_name = $student['student_name'];
+    try {
+        if (!$conn->begin_transaction()) {
+            throw new RuntimeException($conn->error);
+        }
+        foreach ([
+            'DELETE FROM performance_evaluations WHERE student_id = ? OR student_id = ?',
+            'DELETE FROM attendance_logs WHERE student_id = ? OR student_id = ?',
+            'DELETE FROM student_supervisor_assignments WHERE student_id = ? OR student_id = ?',
+        ] as $delete_sql) {
+            $delete_stmt = $conn->prepare($delete_sql);
+            if (!$delete_stmt) {
+                throw new RuntimeException($conn->error);
+            }
+            $delete_stmt->bind_param('ss', $student_id_string, $student_name);
+            if (!$delete_stmt->execute()) {
+                throw new RuntimeException($delete_stmt->error);
+            }
+            $delete_stmt->close();
+        }
+
+        $delete_student = $conn->prepare('DELETE FROM students WHERE id = ?');
+        if (!$delete_student) {
+            throw new RuntimeException($conn->error);
+        }
+        $delete_student->bind_param('i', $student_id);
+        if (!$delete_student->execute()) {
+            throw new RuntimeException($delete_student->error);
+        }
+        $delete_student->close();
+        if (!$conn->commit()) {
+            throw new RuntimeException($conn->error);
+        }
+    } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('Student deletion failed for student ID ' . $student_id . ': ' . $e->getMessage());
+        http_response_code(500);
+        exit('Unable to delete the student and related records. Please contact the administrator.');
+    }
+
+    header('Location: dashboard.php?student_deleted=1');
+    exit;
+}
+
 $result = $conn->query("SELECT attendance_logs.*, agencies.agency_name
     FROM attendance_logs
     LEFT JOIN student_supervisor_assignments
@@ -2465,12 +2542,45 @@ $distinct_strands = count(array_filter(array_unique(array_map(function ($s) {
 
         .strand-student {
             display: flex;
+            flex: 1;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .strand-student-row {
+            display: flex;
             align-items: center;
             gap: 10px;
             padding: 12px 2px;
             border-bottom: 1px solid #f1e7e7;
-            color: inherit;
-            text-decoration: none;
+        }
+
+        .strand-student-row:last-child {
+            border-bottom: 0;
+        }
+
+        .strand-student-delete {
+            display: inline-flex;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            background: #fff;
+            color: #b91c1c;
+            cursor: pointer;
+        }
+
+        .strand-student-delete:hover,
+        .strand-student-delete:focus-visible {
+            background: #fee2e2;
+            outline: 2px solid #b91c1c;
+            outline-offset: 2px;
         }
 
         .strand-student[hidden] {
@@ -2485,10 +2595,6 @@ $distinct_strands = count(array_filter(array_unique(array_map(function ($s) {
         a.strand-student:focus-visible {
             outline: 2px solid var(--reference-purple);
             outline-offset: 2px;
-        }
-
-        .strand-student:last-child {
-            border-bottom: 0;
         }
 
         .strand-student-icon {
@@ -2628,6 +2734,11 @@ $distinct_strands = count(array_filter(array_unique(array_map(function ($s) {
                     <div class="dashboard-header py-4 px-4">
                 <div class="dashboard-title">
                     <h1>Student Attendance Dashboard</h1>
+                    <?php if (isset($_GET['student_deleted'])): ?>
+                        <p class="student-delete-notice" role="status">Student and related attendance, assignments, and evaluations were deleted.</p>
+                    <?php elseif (($_GET['student_delete_error'] ?? '') === 'not_found'): ?>
+                        <p class="student-delete-notice" role="status">That student no longer exists.</p>
+                    <?php endif; ?>
                     <?php if (!$student_exists): ?>
                         <p>Choose a strand to browse its registered students. Students with attendance records can be opened for details.</p>
                     <?php else: ?>
@@ -2697,13 +2808,23 @@ $distinct_strands = count(array_filter(array_unique(array_map(function ($s) {
                                 <?php else: ?>
                                     <?php foreach ($strand_students as $roster_student_id => $roster_student): ?>
                                         <?php $attendance_days = count($student_groups[$roster_student_id] ?? []); ?>
-                                        <a class="strand-student" href="dashboard.php?student_id=<?php echo rawurlencode((string)$roster_student_id); ?>" data-student-name="<?php echo htmlspecialchars($roster_student['student_name'], ENT_QUOTES, 'UTF-8'); ?>">
-                                            <span class="strand-student-icon material-symbols-outlined" aria-hidden="true">person</span>
-                                            <span class="strand-student-name">
-                                                <?php echo htmlspecialchars($roster_student['student_name'], ENT_QUOTES, 'UTF-8'); ?>
-                                            </span>
-                                            <span class="strand-student-records"><?php echo $attendance_days > 0 ? $attendance_days . ' attendance day' . ($attendance_days === 1 ? '' : 's') : 'No attendance yet'; ?></span>
-                                        </a>
+                                        <div class="strand-student-row">
+                                            <a class="strand-student" href="dashboard.php?student_id=<?php echo rawurlencode((string)$roster_student_id); ?>" data-student-name="<?php echo htmlspecialchars($roster_student['student_name'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                <span class="strand-student-icon material-symbols-outlined" aria-hidden="true">person</span>
+                                                <span class="strand-student-name">
+                                                    <?php echo htmlspecialchars($roster_student['student_name'], ENT_QUOTES, 'UTF-8'); ?>
+                                                </span>
+                                                <span class="strand-student-records"><?php echo $attendance_days > 0 ? $attendance_days . ' attendance day' . ($attendance_days === 1 ? '' : 's') : 'No attendance yet'; ?></span>
+                                            </a>
+                                            <form method="post" onsubmit="return confirm('Permanently delete this student and all related attendance, assignments, and evaluations?');">
+                                                <input type="hidden" name="action" value="delete_student">
+                                                <input type="hidden" name="student_id" value="<?php echo (int)$roster_student_id; ?>">
+                                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                <button class="strand-student-delete" type="submit" aria-label="Delete <?php echo htmlspecialchars($roster_student['student_name'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                    <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                                                </button>
+                                            </form>
+                                        </div>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </div>
