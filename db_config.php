@@ -1,4 +1,3 @@
-
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
@@ -40,4 +39,3 @@ function project_db_connection() {
         throw new RuntimeException('Database connection failed; check the server error log and database environment variables.', 0, $e);
     }
 }
-?>
