@@ -16,22 +16,6 @@ try {
     $strand = trim($_POST['strand'] ?? $_GET['strand'] ?? '');
     $device_id = trim($_POST['device_id'] ?? $_GET['device_id'] ?? '');
 
-    // Auto-create students table if missing
-    $conn->query("CREATE TABLE IF NOT EXISTS students (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        student_name VARCHAR(255) NOT NULL,
-        strand VARCHAR(100),
-        dob VARCHAR(50),
-        gender VARCHAR(20),
-        address TEXT,
-        phone VARCHAR(50),
-        email VARCHAR(100),
-        parents VARCHAR(255),
-        device_id VARCHAR(255),
-        status VARCHAR(50) DEFAULT 'PENDING',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )");
-
     // -------------------------------------------------------------
     // 1. ACTION: REGISTER
     // -------------------------------------------------------------
@@ -49,11 +33,11 @@ try {
         $email = trim($_POST['email'] ?? $_GET['email'] ?? '');
         $parents = trim($_POST['parents'] ?? $_GET['parents'] ?? '');
 
-        // Check if student already exists using LIKE matching
-        $like_name = '%' . $student_name . '%';
-        $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE student_name LIKE ? OR (device_id = ? AND device_id != "") ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
+        // Check if student already exists using LIKE search
+        $like_pattern = '%' . $student_name . '%';
+        $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE student_name LIKE ? ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
         if ($check_stmt) {
-            $check_stmt->bind_param('ss', $like_name, $device_id);
+            $check_stmt->bind_param('s', $like_pattern);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
 
@@ -116,7 +100,7 @@ try {
 
         $found_row = null;
 
-        // Flexible LIKE search (matches 'kirk', 'kirk ', 'kirk smith', etc.)
+        // LIKE Search: Matches 'kirk', 'kirk ', 'Kirk', etc.
         if (!empty($student_name)) {
             $like_pattern = '%' . $student_name . '%';
             $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE student_name LIKE ? ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
@@ -131,7 +115,7 @@ try {
             }
         }
 
-        // Fallback search by device_id
+        // Fallback search by device_id if name not provided
         if (!$found_row && !empty($device_id)) {
             $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE device_id = ? AND device_id != "" ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
             if ($stmt) {
@@ -168,19 +152,9 @@ try {
             exit();
         }
 
-        // Diagnostic list of registered names in DB
-        $all_names = [];
-        $list_res = $conn->query("SELECT student_name, status FROM students LIMIT 5");
-        if ($list_res) {
-            while ($r = $list_res->fetch_assoc()) {
-                $all_names[] = $r['student_name'] . ' (' . strtoupper(trim($r['status'])) . ')';
-            }
-        }
-        $db_names_text = !empty($all_names) ? ' Available in DB: ' . implode(', ', $all_names) : ' (Database table is empty!)';
-
         echo json_encode([
             'status' => 'NOT_REGISTERED',
-            'message' => 'No account found for "' . $student_name . '".' . $db_names_text
+            'message' => 'No account found for "' . $student_name . '".'
         ]);
         $conn->close();
         exit();
@@ -198,10 +172,10 @@ try {
             exit();
         }
 
-        $like_name = '%' . $student_name . '%';
+        $like_pattern = '%' . $student_name . '%';
         $upd_stmt = $conn->prepare('UPDATE students SET status = ? WHERE student_name LIKE ? OR (device_id = ? AND device_id != "")');
         if ($upd_stmt) {
-            $upd_stmt->bind_param('sss', $new_status, $like_name, $device_id);
+            $upd_stmt->bind_param('sss', $new_status, $like_pattern, $device_id);
             if ($upd_stmt->execute()) {
                 echo json_encode([
                     'status' => 'SUCCESS',
