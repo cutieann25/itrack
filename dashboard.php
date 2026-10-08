@@ -9,6 +9,11 @@ $result = $conn->query("SELECT attendance_logs.*, agencies.agency_name
         ON student_supervisor_assignments.student_id = attendance_logs.student_id
     LEFT JOIN agencies ON agencies.agency_id = student_supervisor_assignments.agency_id
     ORDER BY attendance_logs.log_time DESC");
+if (!$result) {
+    error_log('Coordinator dashboard attendance query failed: ' . $conn->error);
+    http_response_code(500);
+    exit('Unable to load the coordinator dashboard. Please contact the administrator.');
+}
 $locations = [];
 $index = 0;
 
@@ -137,6 +142,11 @@ $student_start_dates = [];
 $registered_student_ids = [];
 $student_ids_by_name = [];
 $student_registry_result = $conn->query('SELECT id, student_name, DATE(created_at) AS start_date FROM students');
+if (!$student_registry_result) {
+    error_log('Coordinator dashboard student query failed: ' . $conn->error);
+    http_response_code(500);
+    exit('Unable to load coordinator student records. Please contact the administrator.');
+}
 while ($student_registry_row = $student_registry_result->fetch_assoc()) {
     $registered_student_id = (string)$student_registry_row['id'];
     $registered_student_ids[$registered_student_id] = true;
