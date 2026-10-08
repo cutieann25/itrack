@@ -3,7 +3,25 @@ require_once 'auth.php';
 require_login(['coordinator']);
 $conn = db_connection();
 
-$result = $conn->query("SELECT student_id, strand, COUNT(*) AS records, MAX(log_time) AS last_seen FROM attendance_logs GROUP BY student_id ORDER BY last_seen DESC");
+$result = $conn->query("SELECT grouped.student_id,
+    (SELECT latest.strand
+     FROM attendance_logs AS latest
+     WHERE latest.student_id = grouped.student_id
+     ORDER BY latest.log_time DESC, latest.id DESC
+     LIMIT 1) AS strand,
+    grouped.records,
+    grouped.last_seen
+    FROM (
+        SELECT student_id, COUNT(*) AS records, MAX(log_time) AS last_seen
+        FROM attendance_logs
+        GROUP BY student_id
+    ) AS grouped
+    ORDER BY grouped.last_seen DESC");
+if (!$result) {
+    error_log('Unable to load attendance reports: ' . $conn->error);
+    http_response_code(500);
+    exit('Unable to load attendance reports. Please contact the administrator.');
+}
 $students = [];
 while ($row = $result->fetch_assoc()) {
     $students[] = [
