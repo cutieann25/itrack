@@ -33,7 +33,7 @@ try {
     )");
 
     // -------------------------------------------------------------
-    // 1. ACTION: REGISTER (Submit new student registration)
+    // 1. ACTION: REGISTER
     // -------------------------------------------------------------
     if ($action === 'register') {
         if (empty($student_name)) {
@@ -49,7 +49,7 @@ try {
         $email = trim($_POST['email'] ?? $_GET['email'] ?? '');
         $parents = trim($_POST['parents'] ?? $_GET['parents'] ?? '');
 
-        // Prioritize APPROVED record if multiple rows exist
+        // Search for existing student (prioritizing APPROVED status)
         $check_stmt = $conn->prepare('SELECT status, student_name, strand FROM students WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) OR (device_id = ? AND device_id != "") ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
         if ($check_stmt) {
             $check_stmt->bind_param('ss', $student_name, $device_id);
@@ -62,17 +62,17 @@ try {
                 if (!empty($device_id)) {
                     $update_dev = $conn->prepare('UPDATE students SET device_id = ? WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?))');
                     if ($update_dev) {
-                        $update_dev->bind_param('ss', $device_id, $student_name);
+                        $update_dev->bind_param('ss', $device_id, $row['student_name']);
                         $update_dev->execute();
                         $update_dev->close();
                     }
                 }
 
                 echo json_encode([
-                    'status' => strtoupper($row['status']),
+                    'status' => strtoupper(trim($row['status'])),
                     'strand' => $row['strand'],
                     'student_name' => $row['student_name'],
-                    'message' => 'Account already exists with status: ' . strtoupper($row['status'])
+                    'message' => 'Account found with status: ' . strtoupper(trim($row['status']))
                 ]);
                 $check_stmt->close();
                 $conn->close();
@@ -94,10 +94,7 @@ try {
                     'message' => 'Registration submitted. Waiting for coordinator approval.'
                 ]);
             } else {
-                echo json_encode([
-                    'status' => 'ERROR',
-                    'message' => 'Failed to submit registration: ' . $insert_stmt->error
-                ]);
+                echo json_encode(['status' => 'ERROR', 'message' => 'Failed to submit: ' . $insert_stmt->error]);
             }
             $insert_stmt->close();
         }
@@ -107,48 +104,82 @@ try {
     }
 
     // -------------------------------------------------------------
-    // 2. ACTION: CHECK (Check approval status)
+    // 2. ACTION: CHECK / LOGIN
     // -------------------------------------------------------------
     if ($action === 'check') {
         if (empty($student_name) && empty($device_id)) {
-            echo json_encode([
-                'status' => 'ERROR',
-                'message' => 'Student name or Device ID is required'
-            ]);
+            echo json_encode(['status' => 'ERROR', 'message' => 'Student name or Device ID is required']);
             $conn->close();
             exit();
         }
 
-        // Prioritize APPROVED record
-        $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) OR (device_id = ? AND device_id != "") ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
-        if ($stmt) {
-            $stmt->bind_param('ss', $student_name, $device_id);
-            $stmt->execute();
-            $result = $stmt->get_result();
+        $found_row = null;
 
-            if ($result && $result->num_rows > 0) {
-                $row = $result->fetch_assoc();
-
-                if (!empty($device_id) && $row['device_id'] !== $device_id) {
-                    $upd = $conn->prepare('UPDATE students SET device_id = ? WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?))');
-                    if ($upd) {
-                        $upd->bind_param('ss', $device_id, $row['student_name']);
-                        $upd->execute();
-                        $upd->close();
-                    }
+        // Stage 1: Match by exact or space-normalized name
+        if (!empty($student_name)) {
+            $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE LOWER(TRIM(REPLACE(student_name, "  ", " "))) = LOWER(?) ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
+            if ($stmt) {
+                $stmt->bind_param('s', $student_name);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                if ($res && $res->num_rows > 0) {
+                    $found_row = $res->fetch_assoc();
                 }
-
-                echo json_encode([
-                    'status' => strtoupper($row['status']),
-                    'strand' => $row['strand'],
-                    'student_name' => $row['student_name'],
-                    'message' => 'Status retrieved successfully'
-                ]);
                 $stmt->close();
-                $conn->close();
-                exit();
             }
-            $stmt->close();
+        }
+
+        // Stage 2: Fallback match using LIKE search
+        if (!$found_row && !empty($student_name)) {
+            $like_pattern = '%' . str_replace(' ', '%', $student_name) . '%';
+            $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE student_name LIKE ? ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
+            if ($stmt) {
+                $stmt->bind_param('s', $like_pattern);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                if ($res && $res->num_rows > 0) {
+                    $found_row = $res->fetch_assoc();
+                }
+                $stmt->close();
+            }
+        }
+
+        // Stage 3: Fallback match by device_id
+        if (!$found_row && !empty($device_id)) {
+            $stmt = $conn->prepare('SELECT student_name, status, strand, device_id FROM students WHERE device_id = ? AND device_id != "" ORDER BY (CASE WHEN UPPER(TRIM(status)) = "APPROVED" THEN 1 ELSE 2 END), id DESC LIMIT 1');
+            if ($stmt) {
+                $stmt->bind_param('s', $device_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                if ($res && $res->num_rows > 0) {
+                    $found_row = $res->fetch_assoc();
+                }
+                $stmt->close();
+            }
+        }
+
+        if ($found_row) {
+            $ret_status = strtoupper(trim($found_row['status']));
+
+            // Update device_id if needed
+            if (!empty($device_id) && $found_row['device_id'] !== $device_id) {
+                $upd = $conn->prepare('UPDATE students SET device_id = ? WHERE LOWER(TRIM(student_name)) = LOWER(TRIM(?))');
+                if ($upd) {
+                    $upd->bind_param('ss', $device_id, $found_row['student_name']);
+                    $upd->execute();
+                    $upd->close();
+                }
+            }
+
+            echo json_encode([
+                'status' => $ret_status,
+                'approval_status' => $ret_status,
+                'strand' => $found_row['strand'],
+                'student_name' => $found_row['student_name'],
+                'message' => 'Status retrieved: ' . $ret_status
+            ]);
+            $conn->close();
+            exit();
         }
 
         echo json_encode([
@@ -160,16 +191,13 @@ try {
     }
 
     // -------------------------------------------------------------
-    // 3. ACTION: APPROVE / UPDATE_STATUS (NEW: Coordinator Approval)
+    // 3. ACTION: APPROVE / UPDATE_STATUS
     // -------------------------------------------------------------
     if ($action === 'approve' || $action === 'update_status') {
         $new_status = strtoupper(trim($_POST['status'] ?? $_GET['status'] ?? 'APPROVED'));
 
         if (empty($student_name)) {
-            echo json_encode([
-                'status' => 'ERROR',
-                'message' => 'Student name is required to update status'
-            ]);
+            echo json_encode(['status' => 'ERROR', 'message' => 'Student name is required']);
             $conn->close();
             exit();
         }
@@ -189,27 +217,16 @@ try {
             $upd_stmt->close();
         }
 
-        echo json_encode([
-            'status' => 'ERROR',
-            'message' => 'Failed to update student status in database'
-        ]);
+        echo json_encode(['status' => 'ERROR', 'message' => 'Failed to update student status']);
         $conn->close();
         exit();
     }
 
-    // Default response for unrecognized actions
-    echo json_encode([
-        'status' => 'ERROR',
-        'message' => 'Invalid action: ' . $action
-    ]);
-
+    echo json_encode(['status' => 'ERROR', 'message' => 'Invalid action: ' . $action]);
     $conn->close();
 
 } catch (Throwable $e) {
-    http_response_code(200); // Send 200 JSON payload instead of 500 error page
-    echo json_encode([
-        'status' => 'ERROR',
-        'message' => 'Script Exception: ' . $e->getMessage()
-    ]);
+    http_response_code(200);
+    echo json_encode(['status' => 'ERROR', 'message' => 'Script Exception: ' . $e->getMessage()]);
 }
 ?>
