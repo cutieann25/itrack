@@ -1,4 +1,3 @@
-
 <?php
 // Start the session before loading other files.
 if (session_status() === PHP_SESSION_NONE) {
