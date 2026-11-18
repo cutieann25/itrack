@@ -1,12 +1,17 @@
-FROM php:8.1-apache
 
-# Install required PHP extensions for MySQL database connection
-RUN docker-php-ext-install mysqli pdo pdo_mysql && docker-php-ext-enable mysqli pdo_mysql
+FROM php:8.3-apache
 
-# Enable Apache mod_rewrite if needed
+# Install PHP extensions for MySQL and TiDB connections
+RUN docker-php-ext-install mysqli pdo pdo_mysql
+
+# Enable Apache URL rewriting
 RUN a2enmod rewrite
 
-# Copy your PHP project files to Apache root
+# Set the working directory
+WORKDIR /var/www/html
+
+# Copy the project files into Apache's web directory
 COPY . /var/www/html/
 
+# Set the web server port
 EXPOSE 80
