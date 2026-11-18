@@ -559,6 +559,6 @@ if (!location_access_allowed()) {
             }
         }
     </script>
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDZGxT5GY8G4LpCNVzsuhztkxPM2TBwRPo&loading=async&callback=initMap"></script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCAgjVoW-iR158wPYAhIZFLPgcxlkep1LU&loading=async&callback=initMap"></script>
 </body>
 </html>
