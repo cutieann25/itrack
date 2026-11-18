@@ -3120,7 +3120,7 @@ function printBrandingStyles() {
 }
 
 function printBrandingMarkup() {
-    var marabutLogoUrl = new URL('img/marabut_logo.WEBP', window.location.href).href;
+    var marabutLogoUrl = new URL('img/marabut_logo.webp', window.location.href).href;
     return '<div class="print-branding"><img class="print-branding__marabut" src="' + marabutLogoUrl + '" alt="Marabut National High School logo"></div>';
 }
 
