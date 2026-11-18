@@ -10,6 +10,10 @@ $conn = db_connection();
 $message = '';
 $error = '';
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -69,6 +73,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param('siis', $student_id, $supervisor_id, $agency_id, $user['id']);
             $message = $stmt->execute() ? 'Student assignment saved.' : 'Student assignment could not be saved.';
         }
+    } elseif ($action === 'delete_supervisor') {
+        $csrf_token = $_POST['csrf_token'] ?? '';
+        $supervisor_id = filter_var($_POST['supervisor_id'] ?? null, FILTER_VALIDATE_INT);
+        if (!is_string($csrf_token) || !hash_equals($_SESSION['csrf_token'], $csrf_token) || $supervisor_id === false || $supervisor_id === null || $supervisor_id <= 0) {
+            http_response_code(400);
+            exit('Invalid supervisor deletion request.');
+        }
+
+        $supervisor_check = $conn->prepare("SELECT id FROM users WHERE id = ? AND role = 'supervisor' LIMIT 1");
+        if (!$supervisor_check) {
+            error_log('Supervisor deletion lookup preparation failed: ' . $conn->error);
+            http_response_code(500);
+            exit('Unable to delete this supervisor. Please contact the administrator.');
+        }
+        $supervisor_check->bind_param('i', $supervisor_id);
+        if (!$supervisor_check->execute()) {
+            error_log('Supervisor deletion lookup failed: ' . $supervisor_check->error);
+            http_response_code(500);
+            exit('Unable to delete this supervisor. Please contact the administrator.');
+        }
+        $supervisor_exists = $supervisor_check->get_result()->num_rows > 0;
+        $supervisor_check->close();
+        if (!$supervisor_exists) {
+            $error = 'That supervisor account no longer exists.';
+        } else {
+            try {
+                if (!$conn->begin_transaction()) {
+                    throw new RuntimeException($conn->error);
+                }
+
+                $evaluation_delete = $conn->prepare('DELETE FROM performance_evaluations WHERE evaluator_id = ?');
+                if (!$evaluation_delete) {
+                    throw new RuntimeException($conn->error);
+                }
+                $evaluation_delete->bind_param('i', $supervisor_id);
+                if (!$evaluation_delete->execute()) {
+                    throw new RuntimeException($evaluation_delete->error);
+                }
+                $evaluation_delete->close();
+
+                $assignment_delete = $conn->prepare('DELETE FROM student_supervisor_assignments WHERE supervisor_id = ? OR assigned_by = ?');
+                if (!$assignment_delete) {
+                    throw new RuntimeException($conn->error);
+                }
+                $assignment_delete->bind_param('ii', $supervisor_id, $supervisor_id);
+                if (!$assignment_delete->execute()) {
+                    throw new RuntimeException($assignment_delete->error);
+                }
+                $assignment_delete->close();
+
+                $account_delete = $conn->prepare("DELETE FROM users WHERE id = ? AND role = 'supervisor'");
+                if (!$account_delete) {
+                    throw new RuntimeException($conn->error);
+                }
+                $account_delete->bind_param('i', $supervisor_id);
+                if (!$account_delete->execute() || $account_delete->affected_rows !== 1) {
+                    throw new RuntimeException($account_delete->error ?: 'Supervisor account was not deleted.');
+                }
+                $account_delete->close();
+
+                if (!$conn->commit()) {
+                    throw new RuntimeException($conn->error);
+                }
+                $message = 'Supervisor account, assignments, and evaluations deleted.';
+            } catch (Throwable $e) {
+                $conn->rollback();
+                error_log('Supervisor deletion failed for user ID ' . $supervisor_id . ': ' . $e->getMessage());
+                $error = 'Unable to delete the supervisor and related records. Please check the server logs.';
+            }
+        }
     } elseif ($action === 'remove_assignment') {
         $id = (int)($_POST['assignment_id'] ?? 0);
         $stmt = $conn->prepare('DELETE FROM student_supervisor_assignments WHERE assignment_id = ?');
@@ -87,6 +161,12 @@ $supervisors = [];
 $result = $conn->query("SELECT id, display_name, username FROM users WHERE role = 'supervisor' AND is_active = 1 ORDER BY display_name");
 while ($row = $result->fetch_assoc()) {
     $supervisors[] = $row;
+}
+
+$all_supervisors = [];
+$result = $conn->query("SELECT id, display_name, username, is_active FROM users WHERE role = 'supervisor' ORDER BY display_name, username");
+while ($row = $result->fetch_assoc()) {
+    $all_supervisors[] = $row;
 }
 
 $students = [];
@@ -732,6 +812,46 @@ foreach ($assignments as $assignment) {
                     </div>
                     <button type="submit" class="btn primary"><?php echo $editing_assignment ? 'Update Assignment' : 'Save Assignment'; ?></button>
                 </form>
+
+                <div class="section-spacer">
+                    <div class="section-head">
+                        <h3>Manage Supervisors</h3>
+                    </div>
+                    <p class="muted">Deleting a supervisor permanently removes their account, evaluations, and related student assignments.</p>
+                    <?php if (empty($all_supervisors)): ?>
+                        <p class="muted">No supervisor accounts found.</p>
+                    <?php else: ?>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Supervisor</th>
+                                    <th>Username</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($all_supervisors as $supervisor): ?>
+                                    <tr>
+                                        <td><?php echo htmlspecialchars($supervisor['display_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($supervisor['username']); ?></td>
+                                        <td><?php echo (int)$supervisor['is_active'] === 1 ? 'Active' : 'Inactive'; ?></td>
+                                        <td>
+                                            <form method="post" onsubmit="return confirm('Permanently delete this supervisor account, all evaluations they submitted, and their related student assignments?');">
+                                                <input type="hidden" name="action" value="delete_supervisor">
+                                                <input type="hidden" name="supervisor_id" value="<?php echo (int)$supervisor['id']; ?>">
+                                                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                <button type="submit" class="btn small danger" aria-label="Delete supervisor <?php echo htmlspecialchars($supervisor['display_name'], ENT_QUOTES, 'UTF-8'); ?>" title="Delete supervisor">
+                                                    <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </div>
 
                 <div class="section-spacer">
                     <div class="section-head">

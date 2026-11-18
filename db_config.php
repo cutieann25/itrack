@@ -1,13 +1,16 @@
+
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Manila');
 
-define('DB_HOST', getenv('DB_HOST') ?: 'mysql-2d11b6ef-itracker-project.f.aivencloud.com');
-define('DB_USER', getenv('DB_USER') ?: 'avnadmin');
-define('DB_PASSWORD', getenv('DB_PASS') ?: (getenv('DB_PASSWORD') ?: ''));
-define('DB_NAME', getenv('DB_NAME') ?: 'defaultdb');
-define('DB_PORT', (int)(getenv('DB_PORT') ?: 28102));
+// TiDB Cloud connection settings
+define('DB_HOST', getenv('DB_HOST') ?: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com');
+define('DB_USER', getenv('DB_USER') ?: 'eECeULhK4dZkEtz.root');
+define('DB_PASSWORD', getenv('DB_PASSWORD') ?: 'znCdsCjQpbtr34wM');
+define('DB_NAME', getenv('DB_NAME') ?: 'attendance_db');
+define('DB_PORT', (int)(getenv('DB_PORT') ?: 4000));
 
 function project_db_connection() {
     if (!extension_loaded('mysqli')) {
@@ -19,23 +22,50 @@ function project_db_connection() {
     }
 
     mysqli_report(MYSQLI_REPORT_OFF);
+
     try {
         $conn = mysqli_init();
+
         if (!$conn) {
             throw new RuntimeException('Unable to initialize the database connection.');
         }
 
-        $conn->ssl_set(null, null, null, null, null);
         $conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, 10);
-        if (!$conn->real_connect(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT, null, MYSQLI_CLIENT_SSL)) {
+
+        // TiDB Cloud TLS connection
+        $caFile = getenv('DB_CA_PATH') ?: (__DIR__ . '/ca.pem');
+
+        if (!file_exists($caFile)) {
+            throw new RuntimeException('TiDB CA certificate file not found.');
+        }
+
+        $conn->ssl_set(null, null, $caFile, null, null);
+
+        if (!$conn->real_connect(
+            DB_HOST,
+            DB_USER,
+            DB_PASSWORD,
+            DB_NAME,
+            DB_PORT,
+            null,
+            MYSQLI_CLIENT_SSL
+        )) {
             throw new RuntimeException($conn->connect_error ?: mysqli_connect_error());
         }
-        if (!$conn->set_charset('utf8mb4')) {
-            throw new RuntimeException($conn->error);
-        }
+
+        $conn->set_charset('utf8mb4');
+
+        $conn->query("SET time_zone = '+08:00'");
+
         return $conn;
+
     } catch (Throwable $e) {
         error_log('Database connection failed: ' . $e->getMessage());
-        throw new RuntimeException('Database connection failed; check the server error log and database environment variables.', 0, $e);
+
+        throw new RuntimeException(
+            'Database connection failed; check the server error log and database environment variables.',
+            0,
+            $e
+        );
     }
 }

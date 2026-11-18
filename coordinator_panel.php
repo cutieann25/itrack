@@ -4,15 +4,102 @@ require_login(['coordinator']);
 
 $conn = project_db_connection();
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['id'])) {
     $action = $_POST['action'];
     $id = filter_var($_POST['id'], FILTER_VALIDATE_INT);
-    $status = $action === 'approve' ? 'APPROVED' : ($action === 'reject' ? 'REJECTED' : null);
+    $csrf_token = $_POST['csrf_token'] ?? '';
 
-    if ($status !== null && $id !== false) {
+    if (!is_string($csrf_token) || !hash_equals($_SESSION['csrf_token'], $csrf_token) || $id === false || $id === null || $id <= 0) {
+        http_response_code(400);
+        exit('Invalid registration action.');
+    }
+
+    if ($action === 'delete') {
+        $lookup = $conn->prepare('SELECT student_name FROM students WHERE id = ? LIMIT 1');
+        if (!$lookup) {
+            error_log('Registration deletion lookup failed: ' . $conn->error);
+            http_response_code(500);
+            exit('Unable to delete the registration. Please contact the administrator.');
+        }
+        $lookup->bind_param('i', $id);
+        if (!$lookup->execute()) {
+            error_log('Registration deletion lookup failed: ' . $lookup->error);
+            http_response_code(500);
+            exit('Unable to delete the registration. Please contact the administrator.');
+        }
+        $student = $lookup->get_result()->fetch_assoc();
+        $lookup->close();
+
+        if (!$student) {
+            header('Location: coordinator_panel.php?delete_error=not_found');
+            exit();
+        }
+
+        try {
+            if (!$conn->begin_transaction()) {
+                throw new RuntimeException($conn->error);
+            }
+
+            $student_id = (string)$id;
+            $student_name = $student['student_name'];
+            foreach ([
+                'DELETE FROM performance_evaluations WHERE student_id = ? OR student_id = ?',
+                'DELETE FROM attendance_logs WHERE student_id = ? OR student_id = ?',
+                'DELETE FROM student_supervisor_assignments WHERE student_id = ? OR student_id = ?',
+            ] as $delete_sql) {
+                $delete_stmt = $conn->prepare($delete_sql);
+                if (!$delete_stmt) {
+                    throw new RuntimeException($conn->error);
+                }
+                $delete_stmt->bind_param('ss', $student_id, $student_name);
+                if (!$delete_stmt->execute()) {
+                    throw new RuntimeException($delete_stmt->error);
+                }
+                $delete_stmt->close();
+            }
+
+            $delete_student = $conn->prepare('DELETE FROM students WHERE id = ?');
+            if (!$delete_student) {
+                throw new RuntimeException($conn->error);
+            }
+            $delete_student->bind_param('i', $id);
+            if (!$delete_student->execute()) {
+                throw new RuntimeException($delete_student->error);
+            }
+            $delete_student->close();
+
+            if (!$conn->commit()) {
+                throw new RuntimeException($conn->error);
+            }
+        } catch (Throwable $e) {
+            $conn->rollback();
+            error_log('Registration deletion failed for student ID ' . $id . ': ' . $e->getMessage());
+            http_response_code(500);
+            exit('Unable to delete the registration and related records. Please contact the administrator.');
+        }
+
+        header('Location: coordinator_panel.php?deleted=1');
+        exit();
+    }
+
+    $status = $action === 'approve' ? 'APPROVED' : ($action === 'reject' ? 'REJECTED' : null);
+    if ($status !== null) {
         $stmt = $conn->prepare("UPDATE students SET status = ? WHERE id = ? AND status = 'PENDING'");
+        if (!$stmt) {
+            error_log('Registration status update preparation failed: ' . $conn->error);
+            http_response_code(500);
+            exit('Unable to update the registration. Please contact the administrator.');
+        }
         $stmt->bind_param('si', $status, $id);
-        $stmt->execute();
+        if (!$stmt->execute()) {
+            error_log('Registration status update failed: ' . $stmt->error);
+            http_response_code(500);
+            exit('Unable to update the registration. Please contact the administrator.');
+        }
         $stmt->close();
     }
 
@@ -170,6 +257,11 @@ $result = $conn->query('SELECT id, student_name, strand, gender, dob, phone, par
         <a href="dashboard.php" class="btn btn-dashboard">&larr; Back to Dashboard</a>
         <h2>Coordinator Student Approval Dashboard</h2>
         <p>Review and manage student access requests for the iTracker system.</p>
+        <?php if (isset($_GET['deleted'])): ?>
+            <p role="status">Registration and related student records deleted.</p>
+        <?php elseif (($_GET['delete_error'] ?? '') === 'not_found'): ?>
+            <p role="status">That student registration no longer exists.</p>
+        <?php endif; ?>
 
         <table>
             <thead>
@@ -203,17 +295,25 @@ $result = $conn->query('SELECT id, student_name, strand, gender, dob, phone, par
                                         <form method="post">
                                             <input type="hidden" name="id" value="<?php echo (int)$row['id']; ?>">
                                             <input type="hidden" name="action" value="approve">
+                                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
                                             <button type="submit" class="btn btn-approve" onclick="return confirm('Approve this student account?');">Approve</button>
                                         </form>
                                         <form method="post">
                                             <input type="hidden" name="id" value="<?php echo (int)$row['id']; ?>">
                                             <input type="hidden" name="action" value="reject">
+                                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
                                             <button type="submit" class="btn btn-reject" onclick="return confirm('Reject this student account?');">Reject</button>
                                         </form>
                                     </div>
                                 <?php else: ?>
                                     Decision recorded
                                 <?php endif; ?>
+                                <form method="post" onsubmit="return confirm('Permanently delete this registration and all related attendance, assignments, and evaluations?');">
+                                    <input type="hidden" name="id" value="<?php echo (int)$row['id']; ?>">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>">
+                                    <button type="submit" class="btn btn-reject">Delete</button>
+                                </form>
                             </td>
                         </tr>
                     <?php endwhile; ?>
