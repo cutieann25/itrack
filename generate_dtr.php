@@ -1,148 +1,243 @@
 <?php
-/**
- * i-Tracker DTR Generator
- * SECURITY FIX: Uses strict binary cleaning and headers to bypass Safe Browsing flags.
- */
-
-// 1. Initialize output buffering to prevent accidental whitespace or notices
 ob_start();
-error_reporting(0); // Disable error reporting to prevent logs from corrupting the PDF
 date_default_timezone_set('Asia/Manila');
+require_once('tcpdf/tcpdf.php');
+require_once __DIR__ . '/db_config.php';
 
-// 2. Load dependencies
-$tcpdf_path = __DIR__ . '/tcpdf/tcpdf.php';
-$db_path = __DIR__ . '/db_config.php';
-
-if (!file_exists($tcpdf_path) || !file_exists($db_path)) {
-    ob_end_clean();
-    header("HTTP/1.1 500 Internal Server Error");
-    die("Required libraries missing.");
-}
-
-require_once($tcpdf_path);
-require_once($db_path);
-
+// Database Connection
 $conn = project_db_connection();
-if (!$conn) {
-    ob_end_clean();
-    header("HTTP/1.1 500 Internal Server Error");
-    die("Database connection failed.");
-}
 
-// 3. Capture and Sanitize Inputs
-$student_name = isset($_GET['student_name']) ? trim($_GET['student_name']) : "Student";
-$month_param  = isset($_GET['month']) ? trim($_GET['month']) : date('F Y');
-$strand       = isset($_GET['strand']) ? trim($_GET['strand']) : "N/A";
+$student_name = isset($_GET['student_name']) ? trim($_GET['student_name']) : "________________________";
+$strand = isset($_GET['strand']) ? trim($_GET['strand']) : "";
+$period_label = 'All Recorded Attendance';
 
-// Double-check strand from DB for accuracy (handles commas/special chars)
-$stmt = $conn->prepare("SELECT strand FROM students WHERE student_name = ? LIMIT 1");
-$stmt->bind_param("s", $student_name);
-$stmt->execute();
-$res = $stmt->get_result();
-if ($row = $res->fetch_assoc()) {
-    $strand = $row['strand'];
-}
-$stmt->close();
+$student_id = isset($_GET['student_id']) ? trim($_GET['student_id']) : null;
+$student_lookup = $student_id !== null && $student_id !== '' ? $student_id : $student_name;
+$student_started_on = null;
 
-// 4. Fetch Attendance Logs for the selected month
-$ts    = strtotime($month_param);
-$start = date('Y-m-01 00:00:00', $ts);
-$end   = date('Y-m-t 23:59:59', $ts);
-
-$query = "SELECT log_time, status FROM attendance_logs 
-          WHERE student_name = ? AND log_time BETWEEN ? AND ? 
-          ORDER BY log_time ASC";
-$logStmt = $conn->prepare($query);
-$logStmt->bind_param("sss", $student_name, $start, $end);
-$logStmt->execute();
-$result = $logStmt->get_result();
-
-$logs = [];
-while ($row = $result->fetch_assoc()) {
-    $timeTs = strtotime($row['log_time']);
-    $day    = (int)date('j', $timeTs);
-    $time   = date('g:i A', $timeTs);
-    $is_am  = (int)date('H', $timeTs) < 12;
-
-    if (stripos($row['status'], '(IN)') !== false) {
-        $is_am ? ($logs[$day]['am_in'] = $time) : ($logs[$day]['pm_in'] = $time);
-    } else {
-        $is_am ? ($logs[$day]['am_out'] = $time) : ($logs[$day]['pm_out'] = $time);
+if ($student_lookup !== '________________________') {
+    $student_stmt = $conn->prepare('SELECT DATE(created_at) AS start_date, student_name, strand FROM students WHERE id = ? OR student_name = ? LIMIT 1');
+    $student_stmt->bind_param('ss', $student_lookup, $student_lookup);
+    $student_stmt->execute();
+    $student_result = $student_stmt->get_result();
+    if ($student_result && $student_result->num_rows > 0) {
+        $student_record = $student_result->fetch_assoc();
+        $student_started_on = $student_record['start_date'] ?? null;
+        if (!empty($student_record['student_name'])) {
+            $student_name = $student_record['student_name'];
+        }
+        if ($strand === '' && !empty($student_record['strand'])) {
+            $strand = $student_record['strand'];
+        }
     }
 }
-$logStmt->close();
+$strand = preg_replace('/^\s*\d+\.\s*/', '', $strand);
+$attendance_student_id = $student_lookup;
 
-// 5. PDF Generation (TCPDF)
-// Format: Narrow slip (105mm x 290mm)
+// Fetch all attendance data for this student, regardless of month.
+$query = "SELECT * FROM attendance_logs WHERE student_id = ? ORDER BY log_time ASC";
+$stmt = $conn->prepare($query);
+$stmt->bind_param("s", $attendance_student_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+$all_logs = [];
+while ($row = $result->fetch_assoc()) {
+    $all_logs[] = $row;
+}
+
+$logs = [];
+$dtr_start_date = $student_started_on;
+
+if ($dtr_start_date === null) {
+    foreach ($all_logs as $row) {
+        $date_key = date('Y-m-d', strtotime($row['log_time']));
+        if ($dtr_start_date === null || $date_key < $dtr_start_date) {
+            $dtr_start_date = $date_key;
+        }
+    }
+}
+$dtr_start_date = $dtr_start_date ?? date('Y-m-d');
+
+foreach ($all_logs as $row) {
+    $ts = strtotime($row['log_time']);
+    $date_key = date('Y-m-d', $ts);
+    if ($student_started_on !== null && $date_key < $student_started_on) {
+        continue;
+    }
+
+    // Number each row from this student's registration/training start date.
+    $start_date = new DateTimeImmutable($dtr_start_date);
+    $log_date = new DateTimeImmutable($date_key);
+    $day = $start_date->diff($log_date)->days + 1;
+    $time = date('g:i A', $ts);
+    $status = $row['status'];
+    $hour = (int)date('H', $ts);
+    $is_am = $hour < 12;
+
+    if (stripos($status, '(IN)') !== false) {
+        if ($is_am) {
+            if (!isset($logs[$day]['am_in'])) $logs[$day]['am_in'] = $time;
+        } else {
+            if (!isset($logs[$day]['pm_in'])) $logs[$day]['pm_in'] = $time;
+        }
+    } else if (stripos($status, '(OUT)') !== false) {
+        if ($is_am) {
+            if (!isset($logs[$day]['am_out'])) $logs[$day]['am_out'] = $time;
+        } else {
+            if (!isset($logs[$day]['pm_out'])) $logs[$day]['pm_out'] = $time;
+        }
+    }
+}
+
+// Custom Size for narrow DTR slip (100mm wide x 285mm tall)
 $pdf = new TCPDF('P', 'mm', array(105, 290), true, 'UTF-8', false);
 $pdf->SetCreator('i-Tracker');
-$pdf->SetTitle('DTR_' . str_replace(' ', '_', $student_name));
+$pdf->SetTitle('DTR - ' . $student_name);
 $pdf->setPrintHeader(false);
 $pdf->setPrintFooter(false);
-$pdf->SetMargins(8, 10, 8);
+$pdf->SetMargins(8, 10, 8); // Increased top margin to 10mm
 $pdf->SetAutoPageBreak(true, 10);
 $pdf->AddPage();
 $pdf->SetFont('helvetica', '', 8);
 
 $html = '
-<div style="text-align:center;">
-    <span style="font-size:8pt;">Republic of the Philippines</span><br>
-    <strong style="font-size:9pt;">MARABUT NATIONAL HIGH SCHOOL</strong><br>
-    <span style="font-size:8pt;">DAILY TIME RECORD</span>
+<div style="text-align:center; font-family:helvetica; font-size:8pt; line-height:10pt;">
+    Republic of the Philippines<br>
+    Department of Education<br>
+    Region VIII<br>
+    Division of Samar<br>
+    <strong style="font-size:9pt; line-height:12pt;">MARABUT NATIONAL HIGH SCHOOL</strong><br>
+    Senior High School
 </div>
-<table width="100%" style="margin-top:10px; font-size:8pt;">
-    <tr><td>Name: <strong>'.strtoupper(htmlspecialchars($student_name)).'</strong></td></tr>
-    <tr><td>Strand: '.htmlspecialchars($strand).'</td></tr>
-    <tr><td>Month: '.$month_param.'</td></tr>
-</table>
-<table border="1" cellpadding="2" cellspacing="0" style="font-size:7pt; margin-top:10px; text-align:center;">
-    <thead>
-        <tr style="font-weight:bold; background-color:#f2f2f2;">
-            <th width="10%">Day</th>
-            <th width="22.5%">AM In</th>
-            <th width="22.5%">AM Out</th>
-            <th width="22.5%">PM In</th>
-            <th width="22.5%">PM Out</th>
-        </tr>
-    </thead>
-    <tbody>';
 
-for ($i = 1; $i <= 31; $i++) {
-    $html .= '<tr>
-        <td>'.$i.'</td>
-        <td>'.($logs[$i]['am_in'] ?? '').'</td>
-        <td>'.($logs[$i]['am_out'] ?? '').'</td>
-        <td>'.($logs[$i]['pm_in'] ?? '').'</td>
-        <td>'.($logs[$i]['pm_out'] ?? '').'</td>
-    </tr>';
+<div style="text-align:center; font-family:helvetica; font-size:12pt; font-weight:bold; margin-top:6px; margin-bottom:8px;">DAILY TIME RECORD</div>
+
+<table width="100%" cellpadding="1" cellspacing="0" style="font-family:helvetica; font-size:8pt; margin-bottom:6px;">
+    <tr>
+        <td width="20%"><strong>Name:</strong></td>
+        <td width="80%"><strong style="text-decoration:underline;">' . strtoupper(htmlspecialchars($student_name)) . '</strong></td>
+    </tr>
+    <tr>
+        <td width="20%"><strong>Period:</strong></td>
+        <td width="80%"><strong>' . htmlspecialchars($period_label) . '</strong></td>
+    </tr>
+    <tr>
+        <td width="20%"><strong>Strand:</strong></td>
+        <td width="80%"><strong>' . htmlspecialchars($strand) . '</strong></td>
+    </tr>
+</table>
+
+<div style="font-family:helvetica;">
+    <table border="1" cellpadding="3" cellspacing="0" style="font-size:7pt; margin-top:4px; border-collapse:collapse; width:100%; table-layout:fixed;">
+        <colgroup>
+            <col width="10%" />
+            <col width="15%" />
+            <col width="15%" />
+            <col width="15%" />
+            <col width="15%" />
+            <col width="15%" />
+            <col width="15%" />
+        </colgroup>
+        <thead>
+            <tr style="text-align:center; font-weight:bold; border-bottom:none;">
+                <th width="10%" rowspan="2" style="vertical-align:middle; border-bottom:none;">Day</th>
+                <th width="30%" colspan="2" style="border-bottom:none;">A. M.</th>
+                <th width="30%" colspan="2" style="border-bottom:none;">P. M.</th>
+                <th width="30%" colspan="2" style="border-bottom:none;">UNDERTIME</th>
+            </tr>
+            <tr style="text-align:center; font-weight:bold; border-top:none;">
+                <th width="15%" style="border-top:none;">Arrival</th>
+                <th width="15%" style="border-top:none;">Depart</th>
+                <th width="15%" style="border-top:none;">Arrival</th>
+                <th width="15%" style="border-top:none;">Depart</th>
+                <th width="15%" style="border-top:none;">Hrs</th>
+                <th width="15%" style="border-top:none;">Min</th>
+            </tr>
+        </thead>
+        <tbody>';
+
+function dtr_slot_should_be_blank($date, $slot_type) {
+    $today = date('Y-m-d');
+    $current_time = date('H:i');
+
+    if ($date > $today) {
+        return true;
+    }
+
+    if ($date < $today) {
+        return false;
+    }
+
+    if ($slot_type === 'am') {
+        return $current_time < '12:00';
+    }
+
+    if ($slot_type === 'pm') {
+        return $current_time < '18:00';
+    }
+
+    return false;
 }
 
-$html .= '</tbody></table>
-<div style="font-size:7pt; font-style:italic; margin-top:10px;">I certify that the above is a true and correct report.</div>
-<div style="margin-top:20px; text-align:center;">
-    __________________________<br>Student Signature
+$training_start = new DateTimeImmutable($dtr_start_date);
+$day_count = 31;
+
+for ($i = 1; $i <= $day_count; $i++) {
+    $row_date = $training_start->modify('+' . ($i - 1) . ' days')->format('Y-m-d');
+    $am_in_value = isset($logs[$i]['am_in']) ? $logs[$i]['am_in'] : null;
+    $am_out_value = isset($logs[$i]['am_out']) ? $logs[$i]['am_out'] : null;
+    $pm_in_value = isset($logs[$i]['pm_in']) ? $logs[$i]['pm_in'] : null;
+    $pm_out_value = isset($logs[$i]['pm_out']) ? $logs[$i]['pm_out'] : null;
+
+    $am_in = $am_in_value !== null ? $am_in_value : (dtr_slot_should_be_blank($row_date, 'am') ? '' : 'Absent');
+    $am_out = $am_out_value !== null ? $am_out_value : (dtr_slot_should_be_blank($row_date, 'am') ? '' : 'Absent');
+    $pm_in = $pm_in_value !== null ? $pm_in_value : (dtr_slot_should_be_blank($row_date, 'pm') ? '' : 'Absent');
+    $pm_out = $pm_out_value !== null ? $pm_out_value : (dtr_slot_should_be_blank($row_date, 'pm') ? '' : 'Absent');
+
+    $html .= '<tr style="text-align:center; line-height:7pt;">
+                <td width="10%">' . $i . '</td>
+                <td width="15%">' . $am_in . '</td>
+                <td width="15%">' . $am_out . '</td>
+                <td width="15%">' . $pm_in . '</td>
+                <td width="15%">' . $pm_out . '</td>
+                <td width="15%"></td>
+                <td width="15%"></td>
+              </tr>';
+}
+
+$html .= '
+        <tr style="text-align:left; font-weight:bold;">
+            <td colspan="2" width="25%" style="white-space:nowrap;">TOTAL</td>
+            <td width="15%"></td>
+            <td width="15%"></td>
+            <td width="15%"></td>
+            <td width="15%"></td>
+            <td width="15%"></td>
+        </tr>
+        </tbody>
+    </table>
+
+    <div style="text-align:left; font-size:7pt; margin-top:25px; line-height:8pt; font-style:italic;">
+        I CERTIFY on my honor that the above is a true and correct report of the hours of work performed,
+        record of which was made daily at the time of arrival and departure from office.
+    </div>
+
+    <table width="100%" style="margin-top:10px; font-size:9pt; text-align:right;">
+        <tr>
+            <td style="padding-right:10px;"><br>__________________________<br><b>' . strtoupper(htmlspecialchars($student_name)) . '</b><br><span style="font-size:7pt;">Student Signature</span></td>
+        </tr>
+        <tr>
+            <td style="text-align:right; font-size:7pt; padding-right:10px;"><br>Verified as to the prescribed office hours:</td>
+        </tr>
+        <tr>
+            <td style="padding-right:10px;"><br>__________________________<br><b>MYLENE M. AMANTILLO</b></td>
+        </tr>
+    </table>
+    <div style="font-size:6pt; text-align:right; margin-top:2px; padding-right:10px;">(See Instructions on back)</div>
 </div>';
 
-$pdf->writeHTML($html, true, false, true, false, '');
-
-// 6. THE CRITICAL SECURITY FIX
-// Clear all buffers to ensure absolute zero text output (including whitespace) leaked before headers
-$pdf_binary = $pdf->Output('', 'S');
-
-while (ob_get_level()) {
-    ob_end_clean();
-}
-
-// Set Headers for forced download - This tells browsers the site is safe
-header('Pragma: public');
-header('Expires: 0');
-header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-header('Content-Type: application/pdf');
-header('X-Content-Type-Options: nosniff');
-header('Content-Disposition: attachment; filename="DTR_'.str_replace(' ', '_', $student_name).'.pdf"');
-header('Content-Transfer-Encoding: binary');
-header('Content-Length: ' . strlen($pdf_binary));
-
-// Final Output
-echo $pdf_binary;
-exit;
+ob_end_clean();
+$pdf->writeHTMLCell(0, 0, '', '', $html, 0, 1, 0, true, '', true);
+$pdf->Output('DTR_' . str_replace(' ', '_', $student_name) . '.pdf', 'I');
+?>
