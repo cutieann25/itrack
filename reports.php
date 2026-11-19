@@ -62,9 +62,7 @@ function display_strand_label($strand) {
             --accent-dark: #1d4ed8;
             --border: rgba(148, 163, 184, 0.32);
         }
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
         body {
             margin: 0;
             min-height: 100%;
@@ -219,18 +217,10 @@ function display_strand_label($strand) {
             transform: translateY(-1px);
             box-shadow: 0 16px 35px rgba(15, 23, 42, 0.06);
         }
-        .report-table tbody tr td {
-            border-bottom: none;
-        }
         .report-table tbody tr td:first-child {
             width: 18%;
             font-weight: 700;
             color: var(--accent-dark);
-        }
-        .report-table tbody tr td:last-child {
-            text-align: right;
-            width: 156px;
-            white-space: nowrap;
         }
         .badge {
             display: inline-flex;
@@ -285,17 +275,6 @@ function display_strand_label($strand) {
             gap: 12px;
             justify-content: flex-end;
         }
-        @media (max-width: 900px) {
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-            .report-table {
-                min-width: 100%;
-            }
-            .report-table tbody tr td:last-child {
-                text-align: left;
-            }
-        }
 
         :root {
             --reference-purple: #dc2626;
@@ -334,7 +313,7 @@ function display_strand_label($strand) {
                 <div class="page-brand">
                     <div class="badge">Reports</div>
                     <h1>Attendance reports & student summaries</h1>
-                    <p>Review the latest student activity, download daily time records, and keep attendance reporting polished and easy to scan.</p>
+                    <p>Review the latest student activity and keep attendance reporting polished and easy to scan.</p>
                 </div>
                 <div class="page-actions">
                     <a href="dashboard.php" class="btn-secondary">Dashboard</a>
@@ -363,8 +342,8 @@ function display_strand_label($strand) {
 
         <section class="report-panel">
             <div class="report-panel-header">
-                <h2>Student Attendance Report</h2>
-                <p>Download a DTR for any student and scan the latest attendance activity.</p>
+                <h2>Student Attendance Summary</h2>
+                <p>Review the latest student attendance activity and record volumes.</p>
             </div>
             <?php if (empty($students)): ?>
                 <div class="empty">No attendance records found to generate reports.</div>
@@ -376,7 +355,6 @@ function display_strand_label($strand) {
                             <th>Strand</th>
                             <th>Records</th>
                             <th>Last Seen</th>
-                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -386,7 +364,6 @@ function display_strand_label($strand) {
                                 <td><?php echo htmlspecialchars(display_strand_label($student['strand'])); ?></td>
                                 <td><span class="badge"><?php echo intval($student['records']); ?></span></td>
                                 <td><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($student['last_seen']))); ?></td>
-                                <td><a class="link-button" href="generate_dtr.php?student_name=<?php echo urlencode($student['student_id']); ?>&strand=<?php echo urlencode($student['strand']); ?>">Download DTR</a></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
