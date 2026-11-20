@@ -2,25 +2,39 @@
 require_once __DIR__ . '/auth.php';
 require_login(['coordinator']);
 
-if (!class_exists('ZipArchive')) {
+if (!class_exists('ZipArchive') && (!class_exists('PharData') || !extension_loaded('zlib'))) {
     http_response_code(500);
-    exit('Project backup is unavailable because the PHP Zip extension is not enabled.');
+    exit('Project backup is unavailable because neither ZIP nor TAR.GZ archive support is enabled.');
 }
 
 $project_directory = __DIR__;
-$backup_name = 'itrack-project-backup-' . date('Y-m-d-His') . '.zip';
-$backup_path = tempnam(sys_get_temp_dir(), 'itrack_backup_');
+$use_zip = class_exists('ZipArchive');
+$backup_name = 'itrack-project-backup-' . date('Y-m-d-His') . ($use_zip ? '.zip' : '.tar.gz');
+$temporary_path = tempnam(sys_get_temp_dir(), 'itrack_backup_');
 
-if ($backup_path === false) {
+if ($temporary_path === false) {
     http_response_code(500);
     exit('Unable to create a temporary backup file.');
 }
 
-$zip = new ZipArchive();
-if ($zip->open($backup_path, ZipArchive::OVERWRITE) !== true) {
-    @unlink($backup_path);
-    http_response_code(500);
-    exit('Unable to create the project backup archive.');
+if ($use_zip) {
+    $backup_path = $temporary_path;
+    $archive = new ZipArchive();
+    if ($archive->open($backup_path, ZipArchive::OVERWRITE) !== true) {
+        @unlink($backup_path);
+        http_response_code(500);
+        exit('Unable to create the project backup archive.');
+    }
+} else {
+    @unlink($temporary_path);
+    $backup_path = $temporary_path . '.tar';
+    try {
+        $archive = new PharData($backup_path);
+    } catch (Throwable $e) {
+        error_log('Unable to create project TAR backup: ' . $e->getMessage());
+        http_response_code(500);
+        exit('Unable to create the project backup archive.');
+    }
 }
 
 $excluded_directories = [
@@ -52,21 +66,36 @@ foreach ($iterator as $file) {
         }
     }
 
-    if ($excluded || preg_match('/\.zip$/i', $relative_path)) {
+    if ($excluded || preg_match('/\.(?:zip|tar|tar\.gz)$/i', $relative_path)) {
         continue;
     }
 
-    $zip->addFile($file_path, str_replace('\\', '/', $relative_path));
+    $archive->addFile($file_path, str_replace('\\', '/', $relative_path));
 }
 
-$zip->close();
+if ($use_zip) {
+    $archive->close();
+} else {
+    unset($archive);
+    try {
+        $archive = (new PharData($backup_path))->compress(Phar::GZ);
+        unset($archive);
+        @unlink($backup_path);
+        $backup_path .= '.gz';
+    } catch (Throwable $e) {
+        @unlink($backup_path);
+        error_log('Unable to compress project TAR backup: ' . $e->getMessage());
+        http_response_code(500);
+        exit('Unable to compress the project backup archive.');
+    }
+}
 
 if (!is_file($backup_path)) {
     http_response_code(500);
     exit('The project backup could not be completed.');
 }
 
-header('Content-Type: application/zip');
+header('Content-Type: ' . ($use_zip ? 'application/zip' : 'application/gzip'));
 header('Content-Disposition: attachment; filename="' . $backup_name . '"');
 header('Content-Length: ' . filesize($backup_path));
 header('Cache-Control: no-store, no-cache, must-revalidate');
