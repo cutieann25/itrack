@@ -3242,7 +3242,7 @@ function printAttendance() {
     printWindow.document.write('</style></head><body>');
     printWindow.document.write(printBrandingMarkup());
     printWindow.document.write('<h2>Student Attendance</h2>');
-    printWindow.document.write('<p>Student Full Name: ' + <?php echo json_encode($selected_student_id ?? ''); ?> + '</p>');
+    printWindow.document.write('<p>Student Full Name: ' + <?php echo json_encode($selected_student_name ?? ''); ?> + '</p>');
     printWindow.document.write('<p><strong>' + recordCount + ' attendance record' + (recordCount === 1 ? '' : 's') + ' found</strong></p>');
     if (table) {
         printWindow.document.write(table.outerHTML);
@@ -3278,7 +3278,7 @@ function printEvaluations() {
     printWindow.document.write('</style></head><body>');
     printWindow.document.write(printBrandingMarkup());
     printWindow.document.write('<h2>Performance Evaluations</h2>');
-    printWindow.document.write('<p>Student Full Name: ' + <?php echo json_encode($selected_student_id ?? ''); ?> + '</p>');
+    printWindow.document.write('<p>Student Full Name: ' + <?php echo json_encode($selected_student_name ?? ''); ?> + '</p>');
     var evaluationCount = section.querySelector('.student-table-title strong');
     var evaluationTable = section.querySelector('.table-responsive');
     if (evaluationCount) {
