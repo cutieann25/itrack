@@ -307,7 +307,7 @@ if (!location_access_allowed()) {
         }
 
         const params = new URLSearchParams(window.location.search);
-        const searchStudentName = (params.get('student_id') || params.get('student_name') || params.get('name') || '').trim();
+        const searchStudentName = (params.get('student_name') || params.get('name') || params.get('student_id') || '').trim();
         const selectedLatitude = Number(params.get('lat'));
         const selectedLongitude = Number(params.get('lng'));
         const hasSelectedLocation = params.has('lat')
