@@ -3143,6 +3143,18 @@ function printEvaluationDetails() {
         element.remove();
     });
 
+    var printStarted = false;
+    var printWhenReady = function () {
+        if (printStarted) return;
+        printStarted = true;
+        window.setTimeout(function () {
+            if (printWindow.closed) return;
+            printWindow.focus();
+            printWindow.print();
+        }, 300);
+    };
+    printWindow.addEventListener('load', printWhenReady, { once: true });
+
     printWindow.document.write('<!DOCTYPE html><html><head><title>Performance Evaluation</title>');
     printWindow.document.write('<style>');
     printWindow.document.write(printBrandingStyles());
@@ -3162,27 +3174,9 @@ function printEvaluationDetails() {
     printWindow.document.write(printableBody.innerHTML);
     printWindow.document.write('</body></html>');
     printWindow.document.close();
-    printWindow.focus();
-
-    var images = Array.prototype.slice.call(printWindow.document.images);
-    var printWhenReady = function () {
-        printWindow.print();
-        printWindow.close();
-    };
-    if (images.length === 0) {
+    if (printWindow.document.readyState === 'complete') {
         printWhenReady();
-        return;
     }
-    var pendingImages = images.length;
-    images.forEach(function (image) {
-        var imageReady = function () {
-            pendingImages -= 1;
-            if (pendingImages === 0) printWhenReady();
-        };
-        image.addEventListener('load', imageReady, { once: true });
-        image.addEventListener('error', imageReady, { once: true });
-        if (image.complete) imageReady();
-    });
 }
 
 document.addEventListener('click', function(event) {
