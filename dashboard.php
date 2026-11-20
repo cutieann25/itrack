@@ -157,7 +157,7 @@ function attendance_slot_should_be_blank($date, $attendance_type) {
     return false;
 }
 
-function attendance_event_cell($event, $badge_class, $student_id, $attendance_type, $date = null) {
+function attendance_event_cell($event, $badge_class, $student_id, $attendance_type, $date = null, $student_name = '') {
     if ($event === null) {
         if (attendance_slot_should_be_blank($date, $attendance_type)) {
             return '';
@@ -174,6 +174,7 @@ function attendance_event_cell($event, $badge_class, $student_id, $attendance_ty
     $url = 'map.php?lat=' . rawurlencode((string)$event['lat'])
         . '&lng=' . rawurlencode((string)$event['lng'])
         . '&student_id=' . rawurlencode($student_id)
+        . '&student_name=' . rawurlencode($student_name)
         . '&date=' . rawurlencode($date ?? '')
         . '&time=' . rawurlencode($event['time'])
         . '&attendance_type=' . rawurlencode($attendance_type)
@@ -182,7 +183,7 @@ function attendance_event_cell($event, $badge_class, $student_id, $attendance_ty
     return $time . '<br><span class="print-exclude"><a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" class="btn btn-sm btn-outline-primary mt-1">View Location</a></span>';
 }
 
-function all_locations_link($student_rows) {
+function all_locations_link($student_rows, $student_name = '') {
     $locations = [];
     $event_labels = [
         'am_in' => 'AM Time In',
@@ -211,6 +212,7 @@ function all_locations_link($student_rows) {
         return '<span class="btn btn-sm btn-secondary disabled" aria-disabled="true" tabindex="-1" style="pointer-events:none; cursor:not-allowed;" title="Location access is available from 6:00 AM to 6:00 PM">View All Locations</span>';
     }
     $url = 'map.php?student_id=' . rawurlencode($student_rows[0]['student_id'])
+        . '&student_name=' . rawurlencode($student_name)
         . '&locations=' . rawurlencode(json_encode($locations, JSON_UNESCAPED_SLASHES));
     return '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" class="btn btn-sm btn-outline-primary">View All Locations</a>';
 }
@@ -2843,7 +2845,7 @@ $distinct_strands = count(array_filter(array_unique(array_map(function ($s) {
                     <div class="student-detail-meta">
                         <span><?php echo count($selected_locations); ?> location<?php echo count($selected_locations) === 1 ? '' : 's'; ?> captured</span>
                         <span><?php echo $selected_rows ? htmlspecialchars(map_strand_label($selected_rows[0]['strand'])) : '-'; ?></span>
-                        <?php echo all_locations_link($selected_rows); ?>
+                        <?php echo all_locations_link($selected_rows, $selected_student_name); ?>
                         <button type="button" class="btn btn-secondary print-exclude" onclick="printAttendance();">Print Attendance</button>
                     </div>
                 </div>
@@ -2871,10 +2873,10 @@ $distinct_strands = count(array_filter(array_unique(array_map(function ($s) {
                                     <td><?php echo $index + 1; ?></td>
                                     <td><?php echo htmlspecialchars($s['day']); ?></td>
                                     <td><?php echo !empty($s['strand']) ? htmlspecialchars(map_strand_label($s['strand'])) : '-'; ?></td>
-                                    <td><?php echo attendance_event_cell($s['am_in'], 'bg-primary', $s['student_id'], 'AM Time In', $s['date']); ?></td>
-                                    <td><?php echo attendance_event_cell($s['am_out'], 'bg-info text-dark', $s['student_id'], 'AM Time Out', $s['date']); ?></td>
-                                    <td><?php echo attendance_event_cell($s['pm_in'], 'bg-success', $s['student_id'], 'PM Time In', $s['date']); ?></td>
-                                    <td><?php echo attendance_event_cell($s['pm_out'], 'bg-warning text-dark', $s['student_id'], 'PM Time Out', $s['date']); ?></td>
+                                    <td><?php echo attendance_event_cell($s['am_in'], 'bg-primary', $s['student_id'], 'AM Time In', $s['date'], $selected_student_name); ?></td>
+                                    <td><?php echo attendance_event_cell($s['am_out'], 'bg-info text-dark', $s['student_id'], 'AM Time Out', $s['date'], $selected_student_name); ?></td>
+                                    <td><?php echo attendance_event_cell($s['pm_in'], 'bg-success', $s['student_id'], 'PM Time In', $s['date'], $selected_student_name); ?></td>
+                                    <td><?php echo attendance_event_cell($s['pm_out'], 'bg-warning text-dark', $s['student_id'], 'PM Time Out', $s['date'], $selected_student_name); ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
