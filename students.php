@@ -33,6 +33,20 @@ while ($row = $result->fetch_assoc()) {
 $total_students = count($students);
 $total_records = array_sum(array_column($students, 'records'));
 
+function strand_filter_code($strand) {
+    $strand = strtoupper(trim((string)$strand));
+    $strand = preg_replace('/^\s*\d+\.\s*/', '', $strand);
+
+    $codes = [
+        'ACCOUNTANCY, BUSINESS AND MANAGEMENT' => 'ABM',
+        'INFORMATION, COMMUNICATION AND TECHNOLOGY' => 'ICT',
+        'HUMANITIES AND SOCIAL SCIENCES' => 'HUMSS',
+        'HOME ECONOMICS' => 'HE',
+    ];
+
+    return $codes[$strand] ?? $strand;
+}
+
 $default_map = null;
 $mapResult = $conn->query("SELECT latitude, longitude, student_id FROM attendance_logs WHERE latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY log_time DESC LIMIT 1");
 if ($mapResult && $mapResult->num_rows > 0) {
@@ -163,7 +177,7 @@ if ($mapResult && $mapResult->num_rows > 0) {
             <?php else: ?>
                 <div class="student-grid" id="studentGrid">
                     <?php foreach ($students as $student): ?>
-                        <a class="student-card" data-strand="<?php echo htmlspecialchars($student['strand']); ?>" href="dashboard.php?student_id=<?php echo urlencode($student['student_id']); ?>">
+                        <a class="student-card" data-strand="<?php echo htmlspecialchars(strand_filter_code($student['strand']), ENT_QUOTES, 'UTF-8'); ?>" href="dashboard.php?student_id=<?php echo urlencode($student['student_id']); ?>">
                             <strong><?php echo htmlspecialchars($student['student_id']); ?></strong>
                             <div class="meta">
                                 <small><?php echo htmlspecialchars($student['strand'] ?: 'No strand'); ?></small>
