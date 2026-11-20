@@ -528,8 +528,9 @@ $rubric_sections = [
 ];
 $selected_evaluations = [];
 if ($student_exists) {
-    $evaluation_stmt = $conn->prepare('SELECT e.*, u.display_name AS evaluator_name FROM performance_evaluations e JOIN users u ON u.id = e.evaluator_id WHERE e.student_id = ? ORDER BY e.evaluation_date DESC, e.created_at DESC');
-    $evaluation_stmt->bind_param('s', $selected_student_id);
+    $evaluation_stmt = $conn->prepare('SELECT e.*, u.display_name AS evaluator_name FROM performance_evaluations e JOIN users u ON u.id = e.evaluator_id WHERE e.student_id = ? OR e.student_id = ? ORDER BY e.evaluation_date DESC, e.created_at DESC');
+    $evaluation_student_name = $student_profile_map[$selected_student_id]['student_name'] ?? $selected_student_id;
+    $evaluation_stmt->bind_param('ss', $selected_student_id, $evaluation_student_name);
     $evaluation_stmt->execute();
     $evaluation_result = $evaluation_stmt->get_result();
     while ($evaluation_row = $evaluation_result->fetch_assoc()) {
