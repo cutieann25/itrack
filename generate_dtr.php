@@ -239,5 +239,26 @@ $html .= '
 
 ob_end_clean();
 $pdf->writeHTMLCell(0, 0, '', '', $html, 0, 1, 0, true, '', true);
+
+$pdf->AddPage();
+$pdf->SetFont('helvetica', '', 7);
+$instructions_html = <<<'HTML'
+<div style="font-family:helvetica; font-size:7pt; line-height:1.15; text-align:justify;">
+    <div style="text-align:center; font-size:9pt; font-weight:bold; margin-bottom:12px;">INSTRUCTIONS</div>
+
+    <p style="margin-bottom:8px;">Civil Service Form No. 48, after completion, should be filed in the records of the Bureau or Office which submits the monthly report on Civil Service Form No. 3 to the Bureau of Civil Service.</p>
+
+    <p style="margin-bottom:8px;">In lieu of the above, court interpreters and stenographers who accompany the judges of the Court of First Instance will fill out the daily time reports on this form in triplicate, after which they should be approved by the judge with whom service has been rendered, or by an officer of the Department of Justice authorized to do so. The original should be forwarded promptly after the end of the month to the Bureau of Civil Service, thru the Department of Justice, the duplicate to be kept in the Department of Justice; and the triplicate, in the office of the Clerk of Court where service was rendered.</p>
+
+    <p style="margin-bottom:8px;">In the space provided for the purpose on the other side will be indicated the office hours the employee is required to observe, as for example, "Regular days, 8:00 to 12:00 and 1:00 to 4:00; Saturdays, 8:00 to 1:00."</p>
+
+    <p style="margin-bottom:4px;">Attention is invited to paragraph 3, Civil Service Rule XV, Executive Order No. 5, series of 1909, which reads as follows:</p>
+
+    <p style="margin:0 0 8px 8px;">"Each chief of a Bureau or Office shall require a daily record of attendance of all the officers and employees under him entitled to leave or absence on vacation (including teachers) to be kept on the proper form and also a systematic office record showing for each day all absences from duty from any cause whatever. At the beginning of each month he shall report to the Commission on the proper form of all absences from any cause whatever, including the exact amount of undertime of each person for each day. Officers or employees serving in the field or on the water need not be required to keep a daily record, but all absences of such employees must be included in the monthly report of changes and absences. Falsification of time records will render the offending officer or employee liable to summary removal from the service and criminal prosecution."</p>
+
+    <p style="font-size:6pt; margin-top:12px;">(NOTE - A record made from memory at some time subsequent to the occurrence of an event is not reliable. Non observance of office hours deprives the employee of the leave privileges although he may have rendered overtime service. Where service rendered outside of the Office for the whole morning or afternoon, notation to that effect should be made clearly.)</p>
+</div>
+HTML;
+$pdf->writeHTMLCell(0, 0, '', '', $instructions_html, 0, 1, 0, true, '', true);
 $pdf->Output('DTR_' . str_replace(' ', '_', $student_name) . '.pdf', 'I');
 ?>
