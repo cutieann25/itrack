@@ -12,6 +12,15 @@ $lng = isset($_POST['longitude']) ? $_POST['longitude'] : null;
 $strand = isset($_POST['strand']) ? $_POST['strand'] : null;
 $log_time = date('Y-m-d H:i:s');
 
+if ((int)date('N') >= 6) {
+    http_response_code(403);
+    echo json_encode([
+        'error' => 'It is ' . date('l') . '. Time-in and time-out are not available on Saturdays and Sundays.'
+    ]);
+    $conn->close();
+    exit;
+}
+
 if (!$student_id || !$status) {
     http_response_code(400);
     echo json_encode(['error' => 'student_id and status are required']);
