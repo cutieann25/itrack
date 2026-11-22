@@ -17,6 +17,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $strand       = isset($_POST['strand']) ? trim($_POST['strand']) : null;
     $status       = isset($_POST['status']) ? $_POST['status'] : ''; // e.g., "Success (IN)"
 
+    $day_of_week = (int)date('N');
+    if ($day_of_week >= 6) {
+        $day_name = date('l');
+        echo 'It is ' . $day_name . '. Time-in and time-out are not available on Saturdays and Sundays.';
+        $conn->close();
+        exit;
+    }
+
     if (empty($student_name)) {
         echo "Error: Student name is required.";
         exit;
