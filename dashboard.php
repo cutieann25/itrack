@@ -142,6 +142,10 @@ function attendance_slot_should_be_blank($date, $attendance_type) {
         return true;
     }
 
+    if ((int)(new DateTimeImmutable($date))->format('N') >= 6) {
+        return true;
+    }
+
     if ($date < $today) {
         return false;
     }
@@ -158,6 +162,10 @@ function attendance_slot_should_be_blank($date, $attendance_type) {
 }
 
 function attendance_event_cell($event, $badge_class, $student_id, $attendance_type, $date = null, $student_name = '') {
+    if ($date !== null && (int)(new DateTimeImmutable($date))->format('N') >= 6) {
+        return '';
+    }
+
     if ($event === null) {
         if (attendance_slot_should_be_blank($date, $attendance_type)) {
             return '';
