@@ -165,6 +165,10 @@ function dtr_slot_should_be_blank($date, $slot_type) {
         return true;
     }
 
+    if ((int)(new DateTimeImmutable($date))->format('N') >= 6) {
+        return true;
+    }
+
     if ($date < $today) {
         return false;
     }
@@ -189,6 +193,10 @@ for ($i = 1; $i <= $day_count; $i++) {
     $am_out_value = isset($logs[$i]['am_out']) ? $logs[$i]['am_out'] : null;
     $pm_in_value = isset($logs[$i]['pm_in']) ? $logs[$i]['pm_in'] : null;
     $pm_out_value = isset($logs[$i]['pm_out']) ? $logs[$i]['pm_out'] : null;
+
+    if ((int)(new DateTimeImmutable($row_date))->format('N') >= 6) {
+        $am_in_value = $am_out_value = $pm_in_value = $pm_out_value = null;
+    }
 
     $am_in = $am_in_value !== null ? $am_in_value : (dtr_slot_should_be_blank($row_date, 'am') ? '' : 'Absent');
     $am_out = $am_out_value !== null ? $am_out_value : (dtr_slot_should_be_blank($row_date, 'am') ? '' : 'Absent');
