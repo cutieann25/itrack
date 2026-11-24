@@ -233,10 +233,7 @@ $html .= '
 
     <table width="100%" style="margin-top:10px; font-size:9pt; text-align:right;">
         <tr>
-            <td style="padding-right:10px;"><br>__________________________<br><b>' . strtoupper(htmlspecialchars($student_name)) . '</b><br><span style="font-size:7pt;">Student Signature</span></td>
-        </tr>
-        <tr>
-            <td style="text-align:right; font-size:7pt; padding-right:10px;"><br>Verified as to the prescribed office hours:</td>
+            <td style="padding-right:10px;"><br>__________________________<br><b>' . strtoupper(htmlspecialchars($student_name)) . '</b><br><span style="font-size:7pt;">Student Signature</span><br>__________________________<br>__________________________<br><span style="font-size:7pt;">Verified as to the prescribed office hours.</span></td>
         </tr>
         <tr>
             <td style="padding-right:10px;"><br>__________________________<br><b>MYLENE M. AMANTILLO</b></td>
