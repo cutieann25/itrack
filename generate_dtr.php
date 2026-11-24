@@ -9,7 +9,6 @@ $conn = project_db_connection();
 
 $student_name = isset($_GET['student_name']) ? trim($_GET['student_name']) : "________________________";
 $strand = isset($_GET['strand']) ? trim($_GET['strand']) : "";
-$period_label = 'All Recorded Attendance';
 
 $student_id = isset($_GET['student_id']) ? trim($_GET['student_id']) : null;
 $student_lookup = $student_id !== null && $student_id !== '' ? $student_id : $student_name;
@@ -58,6 +57,7 @@ if ($dtr_start_date === null) {
     }
 }
 $dtr_start_date = $dtr_start_date ?? date('Y-m-d');
+$report_date = $dtr_start_date;
 
 foreach ($all_logs as $row) {
     $ts = strtotime($row['log_time']);
@@ -65,6 +65,7 @@ foreach ($all_logs as $row) {
     if ($student_started_on !== null && $date_key < $student_started_on) {
         continue;
     }
+    $report_date = $date_key;
 
     // Number each row from this student's registration/training start date.
     $start_date = new DateTimeImmutable($dtr_start_date);
@@ -89,6 +90,8 @@ foreach ($all_logs as $row) {
         }
     }
 }
+$report_month = date('F', strtotime($report_date));
+$report_year = date('Y', strtotime($report_date));
 
 // Custom Size for narrow DTR slip (100mm wide x 285mm tall)
 $pdf = new TCPDF('P', 'mm', array(105, 290), true, 'UTF-8', false);
@@ -119,8 +122,11 @@ $html = '
         <td width="80%"><strong style="text-decoration:underline;">' . strtoupper(htmlspecialchars($student_name)) . '</strong></td>
     </tr>
     <tr>
-        <td width="20%"><strong>Period:</strong></td>
-        <td width="80%"><strong>' . htmlspecialchars($period_label) . '</strong></td>
+        <td colspan="2" style="font-size:7pt;"><i>For the month of <u>' . htmlspecialchars($report_month) . '</u>, <u>' . htmlspecialchars($report_year) . '</u></i></td>
+    </tr>
+    <tr>
+        <td width="47%" style="font-size:6pt; line-height:7pt;">Official hours for arrival<br>and departure</td>
+        <td width="53%" style="font-size:6pt; line-height:7pt;">Regular days <u>____________</u><br>Saturdays <u>____________</u></td>
     </tr>
     <tr>
         <td width="20%"><strong>Strand:</strong></td>
