@@ -188,12 +188,49 @@ function display_strand_label($strand) {
             margin: 0;
             color: var(--text-muted);
         }
+        .report-panel-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .report-search {
+            position: relative;
+            flex: 0 1 340px;
+        }
+        .report-search .material-symbols-outlined {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 20px;
+            pointer-events: none;
+        }
+        .report-search input {
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            padding: 11px 14px 11px 42px;
+            background: #fff;
+            color: #3f1d1d;
+            outline: none;
+            transition: border-color .2s ease, box-shadow .2s ease;
+        }
+        .report-search input:focus {
+            border-color: var(--reference-purple);
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.10);
+        }
         .report-table {
             width: 100%;
             border-collapse: separate;
             border-spacing: 0 10px;
             margin-top: 20px;
             min-width: 720px;
+        }
+        .report-table-wrap {
+            overflow-x: auto;
         }
         .report-table th,
         .report-table td {
@@ -278,6 +315,9 @@ function display_strand_label($strand) {
             text-align: center;
             color: var(--text-muted);
         }
+        .search-empty {
+            display: none;
+        }
         .footer-actions {
             margin-top: 24px;
             display: flex;
@@ -288,6 +328,14 @@ function display_strand_label($strand) {
         @media (max-width: 900px) {
             .stats-grid {
                 grid-template-columns: 1fr;
+            }
+            .report-panel-header {
+                align-items: stretch;
+                flex-direction: column;
+            }
+            .report-search {
+                flex: none;
+                width: 100%;
             }
             .report-table {
                 min-width: 100%;
@@ -363,34 +411,45 @@ function display_strand_label($strand) {
 
         <section class="report-panel">
             <div class="report-panel-header">
-                <h2>Student Attendance Report</h2>
-                <p>Download a DTR for any student and scan the latest attendance activity.</p>
+                <div>
+                    <h2>Student Attendance Report</h2>
+                    <p>Download a DTR for any student and scan the latest attendance activity.</p>
+                </div>
+                <?php if (!empty($students)): ?>
+                    <label class="report-search" for="reportSearch">
+                        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                        <input type="search" id="reportSearch" placeholder="Search student or strand" autocomplete="off" aria-label="Search attendance report">
+                    </label>
+                <?php endif; ?>
             </div>
             <?php if (empty($students)): ?>
                 <div class="empty">No attendance records found to generate reports.</div>
             <?php else: ?>
-                <table class="report-table">
-                    <thead>
-                        <tr>
-                            <th>Student</th>
-                            <th>Strand</th>
-                            <th>Records</th>
-                            <th>Last Seen</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($students as $student): ?>
+                <div class="report-table-wrap">
+                    <table class="report-table" id="reportTable">
+                        <thead>
                             <tr>
-                                <td><?php echo htmlspecialchars($student['student_id']); ?></td>
-                                <td><?php echo htmlspecialchars(display_strand_label($student['strand'])); ?></td>
-                                <td><span class="badge"><?php echo intval($student['records']); ?></span></td>
-                                <td><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($student['last_seen']))); ?></td>
-                                <td><a class="link-button" href="generate_dtr.php?student_name=<?php echo urlencode($student['student_id']); ?>&strand=<?php echo urlencode($student['strand']); ?>">Generate DTR</a></td>
+                                <th>Student</th>
+                                <th>Strand</th>
+                                <th>Records</th>
+                                <th>Last Seen</th>
+                                <th>Action</th>
                             </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($students as $student): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($student['student_id']); ?></td>
+                                    <td><?php echo htmlspecialchars(display_strand_label($student['strand'])); ?></td>
+                                    <td><span class="badge"><?php echo intval($student['records']); ?></span></td>
+                                    <td><?php echo htmlspecialchars(date('M j, Y g:i A', strtotime($student['last_seen']))); ?></td>
+                                    <td><a class="link-button" href="generate_dtr.php?student_name=<?php echo urlencode($student['student_id']); ?>&strand=<?php echo urlencode($student['strand']); ?>">Generate DTR</a></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="empty search-empty" id="reportSearchEmpty" role="status">No matching attendance records found.</div>
             <?php endif; ?>
         </section>
 
@@ -401,5 +460,29 @@ function display_strand_label($strand) {
         </div>
         </main>
     </div>
+<script>
+    var reportSearch = document.getElementById('reportSearch');
+    var reportTable = document.getElementById('reportTable');
+    var reportSearchEmpty = document.getElementById('reportSearchEmpty');
+
+    if (reportSearch && reportTable) {
+        reportSearch.addEventListener('input', function() {
+            var query = reportSearch.value.trim().toLowerCase();
+            var rows = reportTable.querySelectorAll('tbody tr');
+            var visibleRows = 0;
+
+            rows.forEach(function(row) {
+                var matches = row.textContent.toLowerCase().includes(query);
+                row.style.display = matches ? '' : 'none';
+                if (matches) {
+                    visibleRows++;
+                }
+            });
+
+            reportTable.style.display = visibleRows ? '' : 'none';
+            reportSearchEmpty.style.display = visibleRows ? 'none' : 'block';
+        });
+    }
+</script>
 </body>
 </html>
