@@ -122,15 +122,15 @@ $html = '
         <td width="80%"><strong style="text-decoration:underline;">' . strtoupper(htmlspecialchars($student_name)) . '</strong></td>
     </tr>
     <tr>
-        <td colspan="2" style="font-size:7pt;"><i>For the month of <u>' . htmlspecialchars($report_month) . '</u>, <u>' . htmlspecialchars($report_year) . '</u></i></td>
-    </tr>
-    <tr>
-        <td width="47%" style="font-size:6pt; line-height:7pt;">Official hours for arrival<br>and departure</td>
-        <td width="53%" style="font-size:6pt; line-height:7pt;">Regular days <u>____________</u><br>Saturdays <u>____________</u></td>
-    </tr>
-    <tr>
         <td width="20%"><strong>Strand:</strong></td>
         <td width="80%"><strong>' . htmlspecialchars($strand) . '</strong></td>
+    </tr>
+    <tr>
+        <td colspan="2" style="font-size:7pt; font-style:italic;">For the month of <u>' . htmlspecialchars($report_month) . '</u>, <u>' . htmlspecialchars($report_year) . '</u></td>
+    </tr>
+    <tr>
+        <td width="47%" style="font-size:7pt; line-height:8pt; font-style:italic;">Official hours for arrival<br>and departure</td>
+        <td width="53%" style="font-size:7pt; line-height:8pt; font-style:italic;">Regular days <u>____________</u><br>Saturdays <u>____________</u></td>
     </tr>
 </table>
 
