@@ -190,8 +190,20 @@ function dtr_slot_should_be_blank($date, $slot_type) {
     return false;
 }
 
+function dtr_minutes_between($time_in, $time_out) {
+    $start = DateTimeImmutable::createFromFormat('!g:i A', $time_in);
+    $end = DateTimeImmutable::createFromFormat('!g:i A', $time_out);
+
+    if ($start === false || $end === false || $end < $start) {
+        return 0;
+    }
+
+    return (int)(($end->getTimestamp() - $start->getTimestamp()) / 60);
+}
+
 $training_start = new DateTimeImmutable($dtr_start_date);
 $day_count = 31;
+$total_minutes = 0;
 
 for ($i = 1; $i <= $day_count; $i++) {
     $row_date = $training_start->modify('+' . ($i - 1) . ' days')->format('Y-m-d');
@@ -202,6 +214,13 @@ for ($i = 1; $i <= $day_count; $i++) {
 
     if ((int)(new DateTimeImmutable($row_date))->format('N') >= 6) {
         $am_in_value = $am_out_value = $pm_in_value = $pm_out_value = null;
+    }
+
+    if ($am_in_value !== null && $am_out_value !== null) {
+        $total_minutes += dtr_minutes_between($am_in_value, $am_out_value);
+    }
+    if ($pm_in_value !== null && $pm_out_value !== null) {
+        $total_minutes += dtr_minutes_between($pm_in_value, $pm_out_value);
     }
 
     $am_in = $am_in_value !== null ? $am_in_value : (dtr_slot_should_be_blank($row_date, 'am') ? '' : 'Absent');
@@ -220,14 +239,13 @@ for ($i = 1; $i <= $day_count; $i++) {
               </tr>';
 }
 
+$total_hours = intdiv($total_minutes, 60);
+$remaining_minutes = $total_minutes % 60;
+
 $html .= '
         <tr style="text-align:left; font-weight:bold;">
             <td colspan="2" width="25%" style="white-space:nowrap;">TOTAL</td>
-            <td width="15%"></td>
-            <td width="15%"></td>
-            <td width="15%"></td>
-            <td width="15%"></td>
-            <td width="15%"></td>
+            <td colspan="5" width="75%" style="text-align:center;">' . $total_hours . ' hrs ' . $remaining_minutes . ' mins</td>
         </tr>
         </tbody>
     </table>
