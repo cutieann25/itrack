@@ -231,12 +231,23 @@ $html .= '
         record of which was made daily at the time of arrival and departure from office.
     </div>
 
-    <table width="100%" style="margin-top:10px; font-size:9pt; text-align:right;">
+    <table width="100%" style="margin-top:10px; font-size:9pt;">
         <tr>
-            <td style="padding-right:10px;"><br>__________________________<br><b>' . strtoupper(htmlspecialchars($student_name)) . '</b><br><span style="font-size:7pt;">Student Signature</span><br>__________________________<br>__________________________<br><span style="font-size:7pt;">Verified as to the prescribed office hours.</span></td>
+            <td style="text-align:right; padding-right:10px;"><br>__________________________<br><b>' . strtoupper(htmlspecialchars($student_name)) . '</b><br><span style="font-size:7pt;">Student Signature</span></td>
         </tr>
         <tr>
-            <td style="padding-right:10px;"><br>__________________________<br><b>MYLENE M. AMANTILLO</b></td>
+            <td style="padding:0;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr><td height="3" style="border-bottom:0.5px solid #000;"></td></tr>
+                    <tr><td height="3" style="border-bottom:0.5px solid #000;"></td></tr>
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td style="text-align:left; font-size:7pt; font-style:italic; padding-top:2px;">Verified as to the prescribed office hours.</td>
+        </tr>
+        <tr>
+            <td style="text-align:right; padding-right:10px;"><br>__________________________<br><b>MYLENE M. AMANTILLO</b></td>
         </tr>
     </table>
     <div style="font-size:6pt; text-align:right; margin-top:2px; padding-right:10px;">(See Instructions on back)</div>
